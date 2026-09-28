@@ -1,0 +1,482 @@
+import {
+  MODES, buildTrie, generateGame, isAdjacent, scoreWord, totalPoints,
+  planBot, botSkill, updateProfile, DEFAULT_PROFILE,
+} from "./engine.js";
+
+const $ = (id) => document.getElementById(id);
+const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
+
+// ---------- Persistence (localStorage can be unavailable; never let it break the game) ----------
+
+function load(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? { ...fallback, ...JSON.parse(raw) } : structuredClone(fallback);
+  } catch {
+    return structuredClone(fallback);
+  }
+}
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", sound: "on" });
+let profile = load("wg.profile", DEFAULT_PROFILE);
+let trie = null;
+let game = null;
+
+// ---------- Sound ----------
+
+let audio = null;
+function unlockAudio() {
+  if (audio) return;
+  try {
+    audio = new (window.AudioContext || window.webkitAudioContext)();
+  } catch {}
+}
+function beep(freq, dur = 0.06, type = "sine", vol = 0.08, delay = 0) {
+  if (!audio || settings.sound !== "on") return;
+  const t = audio.currentTime + delay;
+  const osc = audio.createOscillator();
+  const gain = audio.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, t);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(gain).connect(audio.destination);
+  osc.start(t);
+  osc.stop(t + dur + 0.02);
+}
+const sfx = {
+  tile: (n) => beep(420 + n * 45, 0.05, "triangle", 0.05),
+  good: () => { beep(660, 0.08, "sine", 0.09); beep(990, 0.12, "sine", 0.09, 0.07); },
+  dup: () => beep(440, 0.1, "sine", 0.06),
+  bad: () => beep(150, 0.14, "square", 0.04),
+  coach: () => beep(330, 0.05, "sine", 0.025),
+  end: () => { beep(523, 0.12); beep(392, 0.12, "sine", 0.08, 0.12); beep(262, 0.25, "sine", 0.08, 0.24); },
+};
+
+// ---------- Screens ----------
+
+function show(id) {
+  for (const s of document.querySelectorAll(".screen")) s.classList.toggle("active", s.id === id);
+  window.scrollTo(0, 0);
+}
+
+// ---------- Home ----------
+
+function renderHome() {
+  for (const seg of document.querySelectorAll(".seg")) {
+    const key = seg.dataset.setting;
+    for (const b of seg.children) b.classList.toggle("on", b.dataset.value === settings[key]);
+  }
+  const level = Math.round(botSkill(profile, settings.size, settings.challenge) * 100);
+  $("coach-sub").textContent = trie
+    ? `Adapts to you · coach level ${level}`
+    : "Loading dictionary…";
+  $("play-coach").disabled = $("play-free").disabled = !trie;
+
+  const { wins, losses, ties } = profile;
+  $("stats").innerHTML = `
+    <div class="stat"><b>${wins}–${losses}${ties ? `–${ties}` : ""}</b><span>vs Coach</span></div>
+    <div class="stat"><b>${level}</b><span>Coach level</span></div>
+    <div class="stat"><b>${profile.best[settings.size] || 0}</b><span>Best ${settings.size}×${settings.size}</span></div>`;
+}
+
+for (const seg of document.querySelectorAll(".seg")) {
+  seg.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    settings[seg.dataset.setting] = b.dataset.value;
+    save("wg.settings", settings);
+    unlockAudio();
+    renderHome();
+  });
+}
+
+// ---------- Board rendering ----------
+
+function renderTiles(el, board, size) {
+  el.style.setProperty("--n", size);
+  el.innerHTML = board
+    .map((t, i) => `<div class="tile${t === "qu" ? " qu" : ""}" data-i="${i}">${t === "qu" ? "Qu" : t}</div>`)
+    .join("");
+}
+
+// Tile centre in board-percent units (0–100), accounting for the grid gap.
+function tileCenter(i, size) {
+  const w = (100 - GAP * (size - 1)) / size;
+  return [(i % size) * (w + GAP) + w / 2, Math.floor(i / size) * (w + GAP) + w / 2];
+}
+
+function drawTrace(svg, line, path, size) {
+  svg.setAttribute("viewBox", "0 0 100 100");
+  line.setAttribute("stroke-width", (100 / size) * 0.12);
+  line.setAttribute("points", path.map((i) => tileCenter(i, size).join(",")).join(" "));
+}
+
+// ---------- Game ----------
+
+function startGame(mode) {
+  unlockAudio();
+  const sizeKey = Number(settings.size);
+  const { size, minLen } = MODES[sizeKey];
+  const duration = Number(settings.duration);
+  const { board, words } = generateGame(sizeKey, trie);
+  const skill = mode === "coach" ? botSkill(profile, sizeKey, settings.challenge) : 0;
+
+  game = {
+    mode, sizeKey, size, minLen, duration, board, words,
+    found: [], foundSet: new Set(), score: 0,
+    plan: mode === "coach" ? planBot(words, skill, duration) : [],
+    botIdx: 0, botScore: 0,
+    elapsed: 0, resumedAt: 0, running: false, over: false,
+    path: [], tracing: false, flashTimer: 0,
+  };
+
+  renderTiles($("board"), board, size);
+  $("found").innerHTML = "";
+  $("scores").classList.toggle("solo", mode !== "coach");
+  updateHud();
+  setCurrent("", "");
+  show("game");
+  countdown(() => {
+    game.running = true;
+    game.resumedAt = performance.now();
+    requestAnimationFrame(tick);
+  });
+}
+
+function countdown(done) {
+  const ov = $("countdown");
+  const big = $("count-big");
+  let n = 3;
+  ov.hidden = false;
+  const step = () => {
+    if (!game) return;
+    if (n === 0) { ov.hidden = true; beep(880, 0.15, "sine", 0.08); done(); return; }
+    big.textContent = n;
+    big.style.animation = "none"; void big.offsetWidth; big.style.animation = "";
+    beep(440, 0.08, "sine", 0.06);
+    n--;
+    setTimeout(step, 650);
+  };
+  step();
+}
+
+function elapsed() {
+  return game.elapsed + (game.running ? (performance.now() - game.resumedAt) / 1000 : 0);
+}
+
+function tick() {
+  if (!game || !game.running) return;
+  const t = elapsed();
+
+  // Coach finds words on its schedule.
+  let bumped = false;
+  while (game.botIdx < game.plan.length && game.plan[game.botIdx].at <= t) {
+    game.botScore += scoreWord(game.plan[game.botIdx].word);
+    game.botIdx++;
+    bumped = true;
+  }
+  if (bumped) {
+    sfx.coach();
+    const box = $("coach-box");
+    box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump");
+  }
+
+  updateHud(t);
+  if (t >= game.duration) return endGame();
+  requestAnimationFrame(tick);
+}
+
+function updateHud(t = 0) {
+  const left = Math.max(0, Math.ceil(game.duration - t));
+  const timer = $("timer");
+  timer.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  timer.classList.toggle("low", left <= 10);
+  $("you-score").textContent = game.score;
+  $("you-count").textContent = plural(game.found.length, "word");
+  $("coach-score").textContent = game.botScore;
+  $("coach-count").textContent = plural(game.botIdx, "word");
+}
+
+function plural(n, w) {
+  return `${n} ${w}${n === 1 ? "" : "s"}`;
+}
+
+function pause() {
+  if (!game || !game.running) return;
+  game.elapsed = elapsed();
+  game.running = false;
+  cancelTrace();
+  $("paused").hidden = false;
+}
+
+function resume() {
+  if (!game || game.running || game.over) return;
+  $("paused").hidden = true;
+  game.running = true;
+  game.resumedAt = performance.now();
+  requestAnimationFrame(tick);
+}
+
+$("pause").addEventListener("click", pause);
+$("resume").addEventListener("click", resume);
+document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
+$("quit").addEventListener("click", () => {
+  if (!game) return;
+  const wasRunning = game.running;
+  pause();
+  if (confirm("Quit this round? It won't count.")) {
+    game = null;
+    $("paused").hidden = true;
+    $("countdown").hidden = true;
+    renderHome();
+    show("home");
+  } else if (wasRunning) {
+    resume();
+  }
+});
+
+// ---------- Tracing ----------
+
+const boardEl = $("board");
+
+function tileAt(x, y) {
+  const rect = boardEl.getBoundingClientRect();
+  const { size } = game;
+  const px = ((x - rect.left) / rect.width) * 100;
+  const py = ((y - rect.top) / rect.height) * 100;
+  const w = (100 - GAP * (size - 1)) / size;
+  const col = Math.round((px - w / 2) / (w + GAP));
+  const row = Math.round((py - w / 2) / (w + GAP));
+  if (col < 0 || row < 0 || col >= size || row >= size) return -1;
+  const i = row * size + col;
+  const [cx, cy] = tileCenter(i, size);
+  // A hit circle smaller than the tile lets diagonal swipes pass corners cleanly.
+  return Math.hypot(px - cx, py - cy) <= (w + GAP) * 0.42 ? i : -1;
+}
+
+function visit(i) {
+  const { path } = game;
+  if (i < 0 || i === path[path.length - 1]) return;
+  if (i === path[path.length - 2]) {
+    path.pop(); // slide back to undo
+  } else if (!path.includes(i) && (path.length === 0 || isAdjacent(game.size, path[path.length - 1], i))) {
+    path.push(i);
+    sfx.tile(path.length);
+  } else {
+    return;
+  }
+  renderPath();
+}
+
+function renderPath(state = "") {
+  const { path, board, size } = game;
+  const sel = new Set(path);
+  for (const el of boardEl.children) el.classList.toggle("sel", sel.has(Number(el.dataset.i)));
+  boardEl.classList.remove("good", "dup", "bad");
+  if (state) boardEl.classList.add(state);
+  drawTrace($("trace"), $("trace-line"), path, size);
+  const word = path.map((i) => board[i]).join("");
+  const pts = word.length >= game.minLen && !state ? `+${scoreWord(word)}` : "";
+  if (!state) setCurrent(word, pts);
+}
+
+function setCurrent(word, pts, state = "") {
+  const el = $("current");
+  el.className = `current ${state}`;
+  if (state === "bad") { void el.offsetWidth; }
+  $("current-word").textContent = word;
+  $("current-pts").textContent = pts;
+}
+
+let lastPt = null;
+function handleMove(e) {
+  if (!game?.tracing) return;
+  const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of events.length ? events : [e]) {
+    // Interpolate between samples so fast swipes can't skip a tile.
+    if (lastPt) {
+      const dx = ev.clientX - lastPt[0], dy = ev.clientY - lastPt[1];
+      const steps = Math.ceil(Math.hypot(dx, dy) / 6);
+      for (let s = 1; s < steps; s++) visit(tileAt(lastPt[0] + (dx * s) / steps, lastPt[1] + (dy * s) / steps));
+    }
+    visit(tileAt(ev.clientX, ev.clientY));
+    lastPt = [ev.clientX, ev.clientY];
+  }
+}
+
+boardEl.addEventListener("pointerdown", (e) => {
+  if (!game?.running) return;
+  e.preventDefault();
+  unlockAudio();
+  clearTimeout(game.flashTimer);
+  boardEl.setPointerCapture(e.pointerId);
+  game.tracing = true;
+  game.path = [];
+  lastPt = null;
+  handleMove(e);
+});
+boardEl.addEventListener("pointermove", handleMove);
+boardEl.addEventListener("pointerup", finishTrace);
+boardEl.addEventListener("pointercancel", cancelTrace);
+// Stop iOS from scrolling/bouncing while swiping on the game screen.
+$("game").addEventListener("touchmove", (e) => { if (!e.target.closest(".found")) e.preventDefault(); }, { passive: false });
+
+function cancelTrace() {
+  if (!game) return;
+  game.tracing = false;
+  game.path = [];
+  renderPath();
+}
+
+function finishTrace() {
+  if (!game?.tracing) return;
+  game.tracing = false;
+  const word = game.path.map((i) => game.board[i]).join("");
+  if (game.path.length <= 1) return cancelTrace();
+
+  let state, pts = "";
+  if (word.length < game.minLen) {
+    state = "bad"; pts = "too short"; sfx.bad();
+  } else if (game.foundSet.has(word)) {
+    state = "dup"; pts = "already found"; sfx.dup();
+  } else if (game.words.has(word)) {
+    state = "good";
+    const p = scoreWord(word);
+    pts = `+${p}`;
+    game.found.push(word);
+    game.foundSet.add(word);
+    game.score += p;
+    addChip(word);
+    updateHud(elapsed());
+    sfx.good();
+  } else {
+    state = "bad"; pts = "not a word"; sfx.bad();
+  }
+  renderPath(state);
+  setCurrent(word, pts, state);
+  game.flashTimer = setTimeout(() => { if (game && !game.tracing) { game.path = []; renderPath(); } }, 450);
+}
+
+function addChip(word) {
+  const chip = document.createElement("span");
+  chip.className = "chip new";
+  chip.textContent = word;
+  $("found").prepend(chip);
+}
+
+// ---------- Results ----------
+
+function endGame() {
+  game.running = false;
+  game.over = true;
+  cancelTrace();
+  sfx.end();
+
+  const { mode, sizeKey, score, botScore, words } = game;
+  const available = totalPoints(words.keys());
+  const result = mode === "coach" ? (score > botScore ? "win" : score < botScore ? "loss" : "tie") : null;
+  const before = botSkill(profile, sizeKey, settings.challenge);
+  profile = updateProfile(profile, { sizeKey, playerPoints: score, available, result });
+  save("wg.profile", profile);
+  const after = botSkill(profile, sizeKey, settings.challenge);
+
+  const titles = { win: "You beat the Coach!", loss: "Coach takes this one", tie: "Dead heat!" };
+  $("result-title").textContent = titles[result] ?? "Time!";
+  const pct = available ? Math.round((score / available) * 100) : 0;
+  let sub = `${plural(game.found.length, "word")} of ${words.size} · ${pct}% of the board's points`;
+  if (result) {
+    const d = Math.round((after - before) * 100);
+    sub += d > 0 ? " · Coach levels up" : d < 0 ? " · Coach eases off" : "";
+  }
+  $("result-sub").textContent = sub;
+  $("result-scores").innerHTML = result
+    ? `<div><b style="color:var(--accent)">${score}</b><span>You</span></div>
+       <div><b style="color:var(--coach)">${botScore}</b><span>Coach</span></div>`
+    : `<div><b style="color:var(--accent)">${score}</b><span>Points</span></div>
+       <div><b>${available}</b><span>Available</span></div>`;
+
+  game.botWords = new Set(game.plan.map((p) => p.word));
+  $("tab-coach").hidden = mode !== "coach";
+  renderTiles($("mini-board"), game.board, game.size);
+  ensureMiniTrace();
+  showPath([]);
+  selectTab("yours");
+  setTimeout(() => show("results"), 700);
+}
+
+function ensureMiniTrace() {
+  if ($("mini-trace")) return;
+  $("mini-board").insertAdjacentHTML("afterend",
+    `<svg class="trace" id="mini-trace" aria-hidden="true"><polyline id="mini-line" points=""/></svg>`);
+}
+
+function showPath(path) {
+  const set = new Set(path);
+  for (const el of $("mini-board").children) {
+    const i = Number(el.dataset.i);
+    el.classList.toggle("sel", set.has(i));
+    el.classList.toggle("start", i === path[0]);
+  }
+  drawTrace($("mini-trace"), $("mini-line"), path, game.size);
+}
+
+function selectTab(tab) {
+  for (const b of $("tabs").children) b.classList.toggle("active", b.dataset.tab === tab);
+  const { words, foundSet, botWords } = game;
+  let list, legend = "";
+  if (tab === "yours") {
+    list = [...foundSet];
+    if (game.mode === "coach") legend = "• = the Coach found it too";
+  } else if (tab === "coach") {
+    list = [...botWords];
+    legend = "• = you found it too";
+  } else {
+    list = [...words.keys()].filter((w) => !foundSet.has(w));
+    legend = "Faded words are obscure. Don't sweat those.";
+  }
+  list.sort((a, b) => scoreWord(b) - scoreWord(a) || a.localeCompare(b));
+
+  const other = tab === "coach" ? foundSet : game.mode === "coach" && tab === "yours" ? botWords : new Set();
+  const rows = list.map((w) => {
+    const cls = ["word-row", other.has(w) ? "both" : "", words.get(w).tier === 3 ? "rare" : ""].join(" ");
+    return `<button class="${cls}" data-w="${w}"><span class="w">${w}</span><span class="pts">${scoreWord(w)}</span></button>`;
+  });
+  $("word-list").innerHTML =
+    (legend ? `<div class="legend">${legend}</div>` : "") +
+    (rows.join("") || `<div class="legend">Nothing here.</div>`);
+}
+
+$("tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b) { selectTab(b.dataset.tab); showPath([]); }
+});
+$("word-list").addEventListener("click", (e) => {
+  const b = e.target.closest(".word-row");
+  if (!b) return;
+  for (const r of $("word-list").querySelectorAll(".active")) r.classList.remove("active");
+  b.classList.add("active");
+  showPath(game.words.get(b.dataset.w).path);
+});
+$("again").addEventListener("click", () => startGame(game.mode));
+$("home-btn").addEventListener("click", () => { renderHome(); show("home"); });
+$("play-coach").addEventListener("click", () => startGame("coach"));
+$("play-free").addEventListener("click", () => startGame("free"));
+
+// ---------- Boot ----------
+
+renderHome();
+fetch("words.txt")
+  .then((r) => r.text())
+  .then((text) => {
+    trie = buildTrie(text);
+    renderHome();
+  })
+  .catch(() => { $("coach-sub").textContent = "Couldn't load the dictionary. Reload to try again."; });
+
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
