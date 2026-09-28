@@ -30,5 +30,5 @@ gradually over the round, as a person would.
 
 ## Word lists
 
-- ENABLE2K word list: public domain.
-- SCOWL (commonness tiers): Copyright 2000-2018 Kevin Atkinson; used under its permissive license.
+- ENABLE word list (enable1.txt): public domain.
+- SCOWL (commonness tiers): see CREDITS.txt for the copyright and permission notice.

@@ -49,4 +49,9 @@ const s0 = botSkill(p, 4);
 for (let i = 0; i < 6; i++) p = updateProfile(p, { sizeKey: 4, playerPoints: 60, available: 400, result: "win" });
 assert.ok(botSkill(p, 4) > s0);
 console.log(`bot skill ${s0.toFixed(3)} -> ${botSkill(p, 4).toFixed(3)} after 6 wins at 15%`);
+// Round length: shorter rounds mean a lower target, and learning is length-neutral.
+assert.ok(botSkill(DEFAULT_PROFILE, 4, "even", 90) < botSkill(DEFAULT_PROFILE, 4, "even", 180));
+const q90 = updateProfile(DEFAULT_PROFILE, { sizeKey: 4, durationSec: 90, playerPoints: 12, available: 100, result: null });
+const q180 = updateProfile(DEFAULT_PROFILE, { sizeKey: 4, durationSec: 180, playerPoints: 12, available: 100, result: null });
+assert.ok(q90.skill[4] > q180.skill[4]); // same points in less time = more skilled
 console.log("all tests passed");

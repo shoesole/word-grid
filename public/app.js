@@ -29,7 +29,11 @@ let game = null;
 
 let audio = null;
 function unlockAudio() {
-  if (audio) return;
+  if (audio) {
+    // iOS suspends audio when the app is backgrounded; revive it on the next gesture.
+    if (audio.state !== "running") audio.resume().catch(() => {});
+    return;
+  }
   try {
     audio = new (window.AudioContext || window.webkitAudioContext)();
   } catch {}
@@ -70,7 +74,7 @@ function renderHome() {
     const key = seg.dataset.setting;
     for (const b of seg.children) b.classList.toggle("on", b.dataset.value === settings[key]);
   }
-  const level = Math.round(botSkill(profile, settings.size, settings.challenge) * 100);
+  const level = Math.round(botSkill(profile, settings.size, settings.challenge, Number(settings.duration)) * 100);
   $("coach-sub").textContent = trie
     ? `Adapts to you · coach level ${level}`
     : "Loading dictionary…";
@@ -123,7 +127,7 @@ function startGame(mode) {
   const { size, minLen } = MODES[sizeKey];
   const duration = Number(settings.duration);
   const { board, words } = generateGame(sizeKey, trie);
-  const skill = mode === "coach" ? botSkill(profile, sizeKey, settings.challenge) : 0;
+  const skill = mode === "coach" ? botSkill(profile, sizeKey, settings.challenge, duration) : 0;
 
   game = {
     mode, sizeKey, size, minLen, duration, board, words,
@@ -376,13 +380,13 @@ function endGame() {
   cancelTrace();
   sfx.end();
 
-  const { mode, sizeKey, score, botScore, words } = game;
+  const { mode, sizeKey, duration, score, botScore, words } = game;
   const available = totalPoints(words.keys());
   const result = mode === "coach" ? (score > botScore ? "win" : score < botScore ? "loss" : "tie") : null;
-  const before = botSkill(profile, sizeKey, settings.challenge);
-  profile = updateProfile(profile, { sizeKey, playerPoints: score, available, result });
+  const before = botSkill(profile, sizeKey, settings.challenge, duration);
+  profile = updateProfile(profile, { sizeKey, durationSec: duration, playerPoints: score, available, result });
   save("wg.profile", profile);
-  const after = botSkill(profile, sizeKey, settings.challenge);
+  const after = botSkill(profile, sizeKey, settings.challenge, duration);
 
   const titles = { win: "You beat the Coach!", loss: "Coach takes this one", tie: "Dead heat!" };
   $("result-title").textContent = titles[result] ?? "Time!";

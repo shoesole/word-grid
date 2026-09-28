@@ -203,8 +203,9 @@ export function planBot(words, skill, durationSec, rng = Math.random) {
 // The player model is the fraction of available points they typically earn.
 // The bot aims for that level times a "pressure" factor that nudges up after
 // the player wins and down after they lose, targeting roughly even matches.
+// Skill is stored for a 2-minute round and scaled to the actual round length.
 export const DEFAULT_PROFILE = {
-  skill: { 4: 0.12, 5: 0.08 }, // estimated player fraction of available points
+  skill: { 4: 0.12, 5: 0.08 }, // estimated player fraction of available points in 120s
   pressure: 1.0,
   games: 0,
   wins: 0,
@@ -216,15 +217,20 @@ export const DEFAULT_PROFILE = {
 
 export const CHALLENGE = { relaxed: 0.85, even: 1.0, tough: 1.15 };
 
-export function botSkill(profile, sizeKey, challenge = "even") {
-  const s = profile.skill[sizeKey] * profile.pressure * (CHALLENGE[challenge] ?? 1);
+// Points found grow a bit less than linearly with time (easy words go first).
+function timeFactor(durationSec) {
+  return Math.pow(durationSec / 120, 0.8);
+}
+
+export function botSkill(profile, sizeKey, challenge = "even", durationSec = 120) {
+  const s = profile.skill[sizeKey] * timeFactor(durationSec) * profile.pressure * (CHALLENGE[challenge] ?? 1);
   return Math.min(0.9, Math.max(0.02, s));
 }
 
 // Update the profile after a round. result: "win" | "loss" | "tie" | null (free play).
-export function updateProfile(profile, { sizeKey, playerPoints, available, result }) {
+export function updateProfile(profile, { sizeKey, durationSec = 120, playerPoints, available, result }) {
   const p = structuredCloneSafe(profile);
-  const frac = available > 0 ? playerPoints / available : 0;
+  const frac = available > 0 ? playerPoints / available / timeFactor(durationSec) : 0;
   // Faster learning early on, steadier once we know the player.
   const alpha = p.games < 5 ? 0.45 : 0.25;
   p.skill[sizeKey] = Math.max(0.01, p.skill[sizeKey] + alpha * (frac - p.skill[sizeKey]));
@@ -236,7 +242,7 @@ export function updateProfile(profile, { sizeKey, playerPoints, available, resul
     p.pressure = Math.min(1.5, Math.max(0.6, p.pressure));
   }
   p.best[sizeKey] = Math.max(p.best[sizeKey] || 0, playerPoints);
-  p.history = [...p.history, { t: Date.now(), sizeKey, playerPoints, available, result }].slice(-100);
+  p.history = [...p.history, { t: Date.now(), sizeKey, durationSec, playerPoints, available, result }].slice(-100);
   return p;
 }
 

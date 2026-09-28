@@ -31,6 +31,7 @@ html, body {
   user-select: none;
   -webkit-touch-callout: none;
   -webkit-text-size-adjust: 100%;
+  touch-action: manipulation; /* no double-tap zoom */
 }
 
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
