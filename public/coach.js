@@ -221,7 +221,8 @@ function tipFor(tag) {
 export function pickHintTarget(words, foundSet, spot, trie, rng = Math.random, only = null) {
   if (only && ![...only].some((w) => !foundSet.has(w))) only = null;
   let best = null;
-  for (const tierCap of [TEACHABLE_TIER, 2]) {
+  // Common words only: counts like "SH starts 3 words" never include obscure ones.
+  for (const tierCap of [TEACHABLE_TIER]) {
     for (const [word, { tier }] of words) {
       if (tier > tierCap || foundSet.has(word) || (only && !only.has(word))) continue;
       const tags = patternTags(word, trie);
@@ -313,7 +314,8 @@ export function hintStep(target, level, board, path) {
 //   within: optional previous starter to extend (only its words, same opening)
 export function pickStarter(words, foundSet, spot, trie, { tiles = 2, within = null, rng = Math.random } = {}) {
   const groups = new Map();
-  for (const tierCap of [TEACHABLE_TIER, 2]) {
+  // Common words only: counts like "SH starts 3 words" never include obscure ones.
+  for (const tierCap of [TEACHABLE_TIER]) {
     for (const [word, { tier, path }] of words) {
       if (tier > tierCap || foundSet.has(word) || path.length <= tiles) continue;
       if (within && !within.words.includes(word)) continue;

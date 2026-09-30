@@ -11,7 +11,7 @@ import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
 // Bump together with VERSION in sw.js.
-const APP_VERSION = "5";
+const APP_VERSION = "6";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
@@ -739,7 +739,7 @@ function selectTab(tab) {
     legend = "• = you found it too";
   } else {
     list = [...words.keys()].filter((w) => !foundSet.has(w));
-    legend = "Faded words are obscure. Don't sweat those.";
+    legend = "Faded words are obscure. The Coach never counts them, so don't sweat those.";
   }
   list.sort((a, b) => scoreWord(b) - scoreWord(a) || a.localeCompare(b));
 
@@ -748,7 +748,7 @@ function selectTab(tab) {
     : tab === "yours" && game.mode === "train" ? game.assisted
     : new Set();
   const rows = list.map((w) => {
-    const cls = ["word-row", other.has(w) ? "both" : "", words.get(w).tier === 3 ? "rare" : ""].join(" ");
+    const cls = ["word-row", other.has(w) ? "both" : "", words.get(w).tier > 1 ? "rare" : ""].join(" ");
     return `<button class="${cls}" data-w="${w}"><span class="w">${w}</span><span class="pts">${scoreWord(w)}</span></button>`;
   });
   $("word-list").innerHTML =

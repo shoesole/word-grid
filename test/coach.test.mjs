@@ -127,4 +127,19 @@ console.log("family:", pie.msg, "glow", pie.extendTiles, "outline", pie.altTiles
 assert.deepEqual(pie.altTiles, [9]);
 assert.deepEqual([...pie.extendTiles].sort((a, b) => a - b), [13, 14]);
 assert.match(pie.msg, /Trace PIE through the outlined E first\.$/);
+// Starters, hints and family counts only ever involve common words.
+for (let seed = 1; seed <= 30; seed++) {
+  const gg = generateGame(4, trie, makeRng(seed));
+  const st = pickStarter(gg.words, new Set(), {}, trie, { rng: makeRng(seed) });
+  if (st) assert.ok(st.words.every((w) => gg.words.get(w).tier <= 1), `starter ${st.words}`);
+  const ht = pickHintTarget(gg.words, new Set(), {}, trie, makeRng(seed));
+  if (ht) assert.ok(gg.words.get(ht.word).tier <= 1, ht.word);
+  for (const w of gg.words.keys()) {
+    for (const r of unfoundRelatives(w, gg.words, new Set([w]))) assert.ok(gg.words.get(r).tier <= 1, r);
+  }
+}
+// With no common words left, there's nothing to nudge toward.
+const onlyRare = new Map([["yare", { tier: 2, path: [0, 1, 2, 3] }], ["reata", { tier: 3, path: [0, 1, 2, 3, 4] }]]);
+assert.equal(pickStarter(onlyRare, new Set(), {}, trie), null);
+assert.equal(pickHintTarget(onlyRare, new Set(), {}, trie), null);
 console.log("coach tests passed");
