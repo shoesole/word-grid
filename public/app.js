@@ -8,6 +8,10 @@ import {
   relation, unfoundRelatives, familyHint,
 } from "./coach.js";
 
+// Shown on the home screen so it's easy to tell which version is running.
+// Bump together with VERSION in sw.js.
+const APP_VERSION = "4";
+
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
 
@@ -768,6 +772,7 @@ $("egg-close").addEventListener("click", () => { $("egg").hidden = true; });
 
 // ---------- Boot ----------
 
+$("version").textContent = `Version ${APP_VERSION}`;
 renderHome();
 fetch("words.txt")
   .then((r) => r.text())

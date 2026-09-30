@@ -59,7 +59,7 @@ gradually over the round, as a person would.
   - `coach.js`: pattern tagging, spotting profile, lessons, hints (no DOM)
   - `app.js`: UI, touch tracing, timer, results
   - `words.txt`: dictionary (built, do not edit by hand)
-  - `sw.js`: offline cache. **Bump `VERSION` whenever anything in `public/` changes.**
+  - `sw.js`: offline support (network-first). **Bump `VERSION` here and `APP_VERSION` in `app.js` whenever anything in `public/` changes.**
 - `scripts/build_dict.py`: rebuilds `words.txt` from `data/` (ENABLE + SCOWL, gitignored)
 - `test/`: `node test/engine.test.mjs && node test/coach.test.mjs`
 
