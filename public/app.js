@@ -2,6 +2,10 @@ import {
   MODES, buildTrie, generateGame, isAdjacent, scoreWord, totalPoints,
   planBot, botSkill, updateProfile, DEFAULT_PROFILE,
 } from "./engine.js";
+import {
+  analyzeRound, updateSpotting, buildLessons, pickHintTarget, hintStep, hitRate,
+  weakestPatterns, HINT_COSTS,
+} from "./coach.js";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
@@ -21,7 +25,7 @@ function save(key, value) {
 }
 
 let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", sound: "on" });
-let profile = load("wg.profile", DEFAULT_PROFILE);
+let profile = load("wg.profile", { ...DEFAULT_PROFILE, spot: {} });
 let trie = null;
 let game = null;
 
@@ -56,7 +60,7 @@ const sfx = {
   good: () => { beep(660, 0.08, "sine", 0.09); beep(990, 0.12, "sine", 0.09, 0.07); },
   dup: () => beep(440, 0.1, "sine", 0.06),
   bad: () => beep(150, 0.14, "square", 0.04),
-  coach: () => beep(330, 0.05, "sine", 0.025),
+  rival: () => beep(330, 0.05, "sine", 0.025),
   end: () => { beep(523, 0.12); beep(392, 0.12, "sine", 0.08, 0.12); beep(262, 0.25, "sine", 0.08, 0.24); },
 };
 
@@ -75,16 +79,33 @@ function renderHome() {
     for (const b of seg.children) b.classList.toggle("on", b.dataset.value === settings[key]);
   }
   const level = Math.round(botSkill(profile, settings.size, settings.challenge, Number(settings.duration)) * 100);
-  $("coach-sub").textContent = trie
-    ? `Adapts to you · coach level ${level}`
+  $("rival-sub").textContent = trie
+    ? `Adapts to you · rival level ${level}`
     : "Loading dictionary…";
-  $("play-coach").disabled = $("play-free").disabled = !trie;
+  $("play-train").disabled = $("play-rival").disabled = $("play-free").disabled = !trie;
 
   const { wins, losses, ties } = profile;
   $("stats").innerHTML = `
-    <div class="stat"><b>${wins}–${losses}${ties ? `–${ties}` : ""}</b><span>vs Coach</span></div>
-    <div class="stat"><b>${level}</b><span>Coach level</span></div>
+    <div class="stat"><b>${wins}–${losses}${ties ? `–${ties}` : ""}</b><span>vs Rival</span></div>
+    <div class="stat"><b>${level}</b><span>Rival level</span></div>
     <div class="stat"><b>${profile.best[settings.size] || 0}</b><span>Best ${settings.size}×${settings.size}</span></div>`;
+  renderSpotting();
+}
+
+// The player's weakest patterns, from every mode's rounds.
+function renderSpotting() {
+  const weak = weakestPatterns(profile.spot);
+  if (!weak.length) { $("spotting").innerHTML = ""; return; }
+  const row = (label, rate) => {
+    const pct = Math.round(rate * 100);
+    return `<div class="spot-row"><span>${label}</span><span class="spot-bar"><i style="width:${pct}%"></i></span><span class="pct">${pct}%</span></div>`;
+  };
+  const cap = (t) => t[0].toUpperCase() + t.slice(1);
+  $("spotting").innerHTML =
+    `<h3>How much you spot (common words)</h3>` +
+    row("All common words", hitRate(profile.spot, "all")) +
+    `<h3 style="margin-top:12px">Work on</h3>` +
+    weak.map((w) => row(cap(w.label), w.rate)).join("");
 }
 
 for (const seg of document.querySelectorAll(".seg")) {
@@ -127,20 +148,23 @@ function startGame(mode) {
   const { size, minLen } = MODES[sizeKey];
   const duration = Number(settings.duration);
   const { board, words } = generateGame(sizeKey, trie);
-  const skill = mode === "coach" ? botSkill(profile, sizeKey, settings.challenge, duration) : 0;
+  const skill = mode === "rival" ? botSkill(profile, sizeKey, settings.challenge, duration) : 0;
 
   game = {
     mode, sizeKey, size, minLen, duration, board, words,
     found: [], foundSet: new Set(), score: 0,
-    plan: mode === "coach" ? planBot(words, skill, duration) : [],
+    plan: mode === "rival" ? planBot(words, skill, duration) : [],
     botIdx: 0, botScore: 0,
     elapsed: 0, resumedAt: 0, running: false, over: false,
     path: [], tracing: false, flashTimer: 0,
+    hint: null, hintsUsed: 0, hintCost: 0, assisted: new Set(), lastFindAt: 0,
   };
 
   renderTiles($("board"), board, size);
   $("found").innerHTML = "";
-  $("scores").classList.toggle("solo", mode !== "coach");
+  $("scores").classList.toggle("solo", mode !== "rival");
+  $("hint-row").hidden = mode !== "train";
+  resetHintUi("Stuck? A hint costs a point or two.");
   updateHud();
   setCurrent("", "");
   show("game");
@@ -176,7 +200,7 @@ function tick() {
   if (!game || !game.running) return;
   const t = elapsed();
 
-  // Coach finds words on its schedule.
+  // Rival finds words on its schedule.
   let bumped = false;
   while (game.botIdx < game.plan.length && game.plan[game.botIdx].at <= t) {
     game.botScore += scoreWord(game.plan[game.botIdx].word);
@@ -184,9 +208,18 @@ function tick() {
     bumped = true;
   }
   if (bumped) {
-    sfx.coach();
-    const box = $("coach-box");
+    sfx.rival();
+    const box = $("rival-box");
     box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump");
+  }
+
+  // Training: offer a hint after a dry spell. The better you get, the longer it waits.
+  if (game.mode === "train" && !game.hint && t - game.lastFindAt >= stuckDelay()) {
+    const btn = $("hint-btn");
+    if (!btn.classList.contains("ready")) {
+      btn.classList.add("ready");
+      $("hint-msg").textContent = "Stuck? Try a hint.";
+    }
   }
 
   updateHud(t);
@@ -201,8 +234,8 @@ function updateHud(t = 0) {
   timer.classList.toggle("low", left <= 10);
   $("you-score").textContent = game.score;
   $("you-count").textContent = plural(game.found.length, "word");
-  $("coach-score").textContent = game.botScore;
-  $("coach-count").textContent = plural(game.botIdx, "word");
+  $("rival-score").textContent = game.botScore;
+  $("rival-count").textContent = plural(game.botIdx, "word");
 }
 
 function plural(n, w) {
@@ -241,6 +274,56 @@ $("quit").addEventListener("click", () => {
   } else if (wasRunning) {
     resume();
   }
+});
+
+// ---------- Hints (training mode) ----------
+
+function stuckDelay() {
+  return 12 + 30 * hitRate(profile.spot, "all");
+}
+
+function resetHintUi(msg) {
+  $("hint-btn").classList.remove("ready");
+  $("hint-btn").disabled = false;
+  $("hint-cost").textContent = `−${HINT_COSTS[0]}`;
+  $("hint-msg").textContent = msg;
+  $("hint-msg").classList.remove("active");
+  showHintTiles({ pulse: [], glow: [], guide: [] });
+}
+
+function showHintTiles({ pulse, glow, guide }) {
+  for (const el of boardEl.children) {
+    const i = Number(el.dataset.i);
+    el.classList.toggle("pulse", pulse.includes(i));
+    el.classList.toggle("glow", glow.includes(i));
+    el.classList.toggle("guide", guide.includes(i));
+  }
+}
+
+$("hint-btn").addEventListener("click", () => {
+  if (!game?.running || game.mode !== "train") return;
+  unlockAudio();
+  if (!game.hint) {
+    const target = pickHintTarget(game.words, game.foundSet, profile.spot, trie);
+    if (!target) { $("hint-msg").textContent = "You've found every common word!"; return; }
+    game.hint = { target, level: -1, path: game.words.get(target.word).path };
+  }
+  const h = game.hint;
+  if (h.level >= HINT_COSTS.length - 1) return;
+  h.level++;
+  const step = hintStep(h.target, h.level, game.board, h.path);
+  game.score -= step.cost;
+  game.hintCost += step.cost;
+  game.hintsUsed++;
+  showHintTiles(step);
+  $("hint-btn").classList.remove("ready");
+  $("hint-msg").textContent = step.msg;
+  $("hint-msg").classList.add("active");
+  const next = HINT_COSTS[h.level + 1];
+  $("hint-cost").textContent = next ? `−${next}` : "";
+  $("hint-btn").disabled = !next;
+  beep(740, 0.08, "sine", 0.06);
+  updateHud(elapsed());
 });
 
 // ---------- Tracing ----------
@@ -354,6 +437,14 @@ function finishTrace() {
     game.found.push(word);
     game.foundSet.add(word);
     game.score += p;
+    game.lastFindAt = elapsed();
+    if (game.hint?.target.word === word) {
+      game.assisted.add(word);
+      game.hint = null;
+      resetHintUi("That's the one. Hint cost already paid.");
+    } else {
+      $("hint-btn").classList.remove("ready");
+    }
     addChip(word);
     updateHud(elapsed());
     sfx.good();
@@ -380,37 +471,64 @@ function endGame() {
   cancelTrace();
   sfx.end();
 
-  const { mode, sizeKey, duration, score, botScore, words } = game;
+  const { mode, sizeKey, duration, score, botScore, words, foundSet, assisted } = game;
   const available = totalPoints(words.keys());
-  const result = mode === "coach" ? (score > botScore ? "win" : score < botScore ? "loss" : "tie") : null;
+  const result = mode === "rival" ? (score > botScore ? "win" : score < botScore ? "loss" : "tie") : null;
   const before = botSkill(profile, sizeKey, settings.challenge, duration);
-  profile = updateProfile(profile, { sizeKey, durationSec: duration, playerPoints: score, available, result });
+  // Hinted rounds would skew the Rival's read on your level, so only unassisted modes feed it.
+  if (mode !== "train") {
+    profile = updateProfile(profile, { sizeKey, durationSec: duration, playerPoints: score, available, result });
+  }
+  const byTag = analyzeRound(words, foundSet, assisted, trie);
+  profile.spot = updateSpotting(profile.spot || {}, byTag);
   save("wg.profile", profile);
   const after = botSkill(profile, sizeKey, settings.challenge, duration);
+  renderLessons(buildLessons(words, foundSet, byTag, profile.spot));
 
-  const titles = { win: "You beat the Coach!", loss: "Coach takes this one", tie: "Dead heat!" };
-  $("result-title").textContent = titles[result] ?? "Time!";
-  const pct = available ? Math.round((score / available) * 100) : 0;
+  const titles = { win: "You beat the Rival!", loss: "Rival takes this one", tie: "Dead heat!" };
+  $("result-title").textContent = titles[result] ?? (mode === "train" ? "Training round" : "Time!");
+  const pct = available ? Math.round((totalPoints(foundSet) / available) * 100) : 0;
   let sub = `${plural(game.found.length, "word")} of ${words.size} · ${pct}% of the board's points`;
   if (result) {
     const d = Math.round((after - before) * 100);
-    sub += d > 0 ? " · Coach levels up" : d < 0 ? " · Coach eases off" : "";
+    sub += d > 0 ? " · Rival levels up" : d < 0 ? " · Rival eases off" : "";
   }
   $("result-sub").textContent = sub;
   $("result-scores").innerHTML = result
     ? `<div><b style="color:var(--accent)">${score}</b><span>You</span></div>
-       <div><b style="color:var(--coach)">${botScore}</b><span>Coach</span></div>`
+       <div><b style="color:var(--rival)">${botScore}</b><span>Rival</span></div>`
+    : mode === "train"
+    ? `<div><b style="color:var(--accent)">${score}</b><span>Points</span></div>
+       <div><b>${foundSet.size - assisted.size}</b><span>Found solo</span></div>
+       <div><b style="color:var(--bad)">${game.hintCost ? `−${game.hintCost}` : 0}</b><span>${plural(game.hintsUsed, "hint")}</span></div>`
     : `<div><b style="color:var(--accent)">${score}</b><span>Points</span></div>
        <div><b>${available}</b><span>Available</span></div>`;
 
   game.botWords = new Set(game.plan.map((p) => p.word));
-  $("tab-coach").hidden = mode !== "coach";
+  $("tab-rival").hidden = mode !== "rival";
   renderTiles($("mini-board"), game.board, game.size);
   ensureMiniTrace();
   showPath([]);
   selectTab("yours");
   setTimeout(() => show("results"), 700);
 }
+
+function renderLessons(lessons) {
+  $("lessons").innerHTML = lessons.map((l) => `
+    <div class="lesson">
+      <h3>${l.title}</h3>
+      <p>${l.text}</p>
+      <div class="chips">${l.words.map((w) => `<button class="chip" data-w="${w}">${w}</button>`).join("")}</div>
+    </div>`).join("");
+}
+
+$("lessons").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip");
+  if (!b) return;
+  for (const r of document.querySelectorAll("#word-list .active, #lessons .active")) r.classList.remove("active");
+  b.classList.add("active");
+  showPath(game.words.get(b.dataset.w).path);
+});
 
 function ensureMiniTrace() {
   if ($("mini-trace")) return;
@@ -434,8 +552,9 @@ function selectTab(tab) {
   let list, legend = "";
   if (tab === "yours") {
     list = [...foundSet];
-    if (game.mode === "coach") legend = "• = the Coach found it too";
-  } else if (tab === "coach") {
+    if (game.mode === "rival") legend = "• = the Rival found it too";
+    if (game.mode === "train" && game.assisted.size) legend = "• = found with a hint";
+  } else if (tab === "rival") {
     list = [...botWords];
     legend = "• = you found it too";
   } else {
@@ -444,7 +563,10 @@ function selectTab(tab) {
   }
   list.sort((a, b) => scoreWord(b) - scoreWord(a) || a.localeCompare(b));
 
-  const other = tab === "coach" ? foundSet : game.mode === "coach" && tab === "yours" ? botWords : new Set();
+  const other = tab === "rival" ? foundSet
+    : tab === "yours" && game.mode === "rival" ? botWords
+    : tab === "yours" && game.mode === "train" ? game.assisted
+    : new Set();
   const rows = list.map((w) => {
     const cls = ["word-row", other.has(w) ? "both" : "", words.get(w).tier === 3 ? "rare" : ""].join(" ");
     return `<button class="${cls}" data-w="${w}"><span class="w">${w}</span><span class="pts">${scoreWord(w)}</span></button>`;
@@ -461,13 +583,14 @@ $("tabs").addEventListener("click", (e) => {
 $("word-list").addEventListener("click", (e) => {
   const b = e.target.closest(".word-row");
   if (!b) return;
-  for (const r of $("word-list").querySelectorAll(".active")) r.classList.remove("active");
+  for (const r of document.querySelectorAll("#word-list .active, #lessons .active")) r.classList.remove("active");
   b.classList.add("active");
   showPath(game.words.get(b.dataset.w).path);
 });
 $("again").addEventListener("click", () => startGame(game.mode));
 $("home-btn").addEventListener("click", () => { renderHome(); show("home"); });
-$("play-coach").addEventListener("click", () => startGame("coach"));
+$("play-train").addEventListener("click", () => startGame("train"));
+$("play-rival").addEventListener("click", () => startGame("rival"));
 $("play-free").addEventListener("click", () => startGame("free"));
 
 // ---------- Boot ----------
@@ -479,7 +602,7 @@ fetch("words.txt")
     trie = buildTrie(text);
     renderHome();
   })
-  .catch(() => { $("coach-sub").textContent = "Couldn't load the dictionary. Reload to try again."; });
+  .catch(() => { $("rival-sub").textContent = "Couldn't load the dictionary. Reload to try again."; });
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   navigator.serviceWorker.register("sw.js").catch(() => {});

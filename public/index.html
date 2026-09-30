@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Word Grid</title>
-  <meta name="description" content="A Boggle-style word game with an adaptive coach. No ads.">
+  <meta name="description" content="A Boggle-style word game with a coach that trains your eye. No ads.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,9 +24,13 @@
     </header>
 
     <div class="play-buttons">
-      <button id="play-coach" class="btn primary big" disabled>
-        <span class="btn-title">Play the Coach</span>
-        <span class="btn-sub" id="coach-sub">Loading dictionary…</span>
+      <button id="play-train" class="btn primary big" disabled>
+        <span class="btn-title">Train with the Coach</span>
+        <span class="btn-sub">Hints when you're stuck · lessons after each round</span>
+      </button>
+      <button id="play-rival" class="btn secondary big" disabled>
+        <span class="btn-title">Race the Rival</span>
+        <span class="btn-sub" id="rival-sub">Loading dictionary…</span>
       </button>
       <button id="play-free" class="btn secondary big" disabled>
         <span class="btn-title">Free Play</span>
@@ -51,7 +55,7 @@
         </div>
       </div>
       <div class="setting">
-        <span class="label">Coach</span>
+        <span class="label">Rival</span>
         <div class="seg" data-setting="challenge">
           <button data-value="relaxed">Relaxed</button>
           <button data-value="even">Even</button>
@@ -68,6 +72,7 @@
     </div>
 
     <div class="stats" id="stats"></div>
+    <div class="spotting" id="spotting"></div>
     <p class="fine">Tap “Share → Add to Home Screen” in Safari to install.</p>
   </section>
 
@@ -80,7 +85,11 @@
     </div>
     <div class="scores" id="scores">
       <div class="score you"><span class="who">You</span><span id="you-score">0</span><span class="count" id="you-count">0 words</span></div>
-      <div class="score coach" id="coach-box"><span class="who">Coach</span><span id="coach-score">0</span><span class="count" id="coach-count">0 words</span></div>
+      <div class="score rival" id="rival-box"><span class="who">Rival</span><span id="rival-score">0</span><span class="count" id="rival-count">0 words</span></div>
+    </div>
+    <div class="hint-row" id="hint-row">
+      <button id="hint-btn" class="hint-btn">Hint <span id="hint-cost">−1</span></button>
+      <span class="hint-msg" id="hint-msg">Stuck? A hint costs a point or two.</span>
     </div>
     <div class="current" id="current"><span id="current-word"></span><span id="current-pts"></span></div>
     <div class="board-wrap">
@@ -106,9 +115,10 @@
     </div>
     <div class="mini-wrap"><div class="board mini" id="mini-board"></div></div>
     <p class="fine center" id="mini-hint">Tap any word to see it on the board.</p>
+    <div class="lessons" id="lessons"></div>
     <div class="tabs" id="tabs">
       <button data-tab="yours" class="active">Yours</button>
-      <button data-tab="coach" id="tab-coach">Coach</button>
+      <button data-tab="rival" id="tab-rival">Rival</button>
       <button data-tab="missed">Missed</button>
     </div>
     <div class="word-list" id="word-list"></div>
