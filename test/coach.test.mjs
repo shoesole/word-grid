@@ -108,10 +108,23 @@ assert.ok(rel.includes("rates") && !rel.includes("rate"), rel.join());
 const rodeBoard = ["h","a","w","x", "w","h","t","k", "o","r","o","e", "n","e","i","d"];
 const rodeWords = solve(rodeBoard, trie, 3);
 const rodeRel = unfoundRelatives("rode", rodeWords, new Set(["rode"]));
-const fh = familyHint("rode", rodeRel, rodeWords, new Set(["rode"]));
+const fh = familyHint("rode", rodeRel, rodeWords, new Set(["rode"]), rodeBoard);
 console.log("family:", rodeRel.join(", "), "->", fh.msg, "glow", fh.extendTiles);
 assert.ok(rodeRel.includes("erode"));
 assert.ok(fh.extendTiles.includes(13)); // the E below-left of R
 assert.match(fh.msg, /^You found RODE\. \d+ more words are related: .*glowing letter/);
 assert.ok(!fh.extendTiles.some((i) => rodeWords.get("rode").path.includes(i)));
+assert.deepEqual(fh.altTiles, []); // ERODE extends the very tiles used
+
+// PIE from the player's screenshot: PIES and PIETY need the *other* E (below the I).
+const pieBoard = ["u","n","y","w", "p","i","e","h", "y","e","b","d", "i","t","s","n"];
+const pieWords = solve(pieBoard, trie, 3);
+const pieFound = new Set(["piney","pied","pin","set","ties","bets","bet","tie","yet","pie"]);
+const pieWordsPath = { ...pieWords.get("pie") };
+pieWords.set("pie", { ...pieWordsPath, path: [4, 5, 6] }); // the tracing the player used
+const pie = familyHint("pie", unfoundRelatives("pie", pieWords, pieFound), pieWords, pieFound, pieBoard);
+console.log("family:", pie.msg, "glow", pie.extendTiles, "outline", pie.altTiles);
+assert.deepEqual(pie.altTiles, [9]);
+assert.deepEqual([...pie.extendTiles].sort((a, b) => a - b), [13, 14]);
+assert.match(pie.msg, /Trace PIE through the outlined E first\.$/);
 console.log("coach tests passed");

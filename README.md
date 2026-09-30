@@ -34,7 +34,9 @@ board (ZONE → ZONES, ZONAL) and don't come back to any of them within 25 s, th
 steps in once you've also gone quiet (the "Starter after" delay, or 15 s if starters
 are off). It glows the tiles that extend your word and says how to get the rest:
 "You found ZONE. 2 more words are related: add the glowing letter or look for a word
-inside it." It lapses after 25 s without progress. Relatives found from it don't count
+inside it." When a relative needs the word traced through a different copy of a letter
+(PIES and PIETY need the other E), that tile gets a dashed outline and the message adds
+"Trace PIE through the outlined E first." It lapses after 25 s without progress. Relatives found from it don't count
 toward your profile.
 
 Hints step up in detail and cost points: pattern cue (−1) → starting tile (−1)

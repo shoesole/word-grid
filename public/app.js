@@ -333,15 +333,19 @@ function familyNudge(t) {
 
 function clearFamily() {
   game.family = null;
-  for (const el of boardEl.children) el.classList.remove("family");
+  for (const el of boardEl.children) el.classList.remove("family", "family-alt");
 }
 
 // Glow the tiles where the found word can be extended; say how to get the rest.
 function showFamilyMessage() {
   if (!game.family) return;
   const { root, words } = game.family;
-  const { msg, extendTiles } = familyHint(root, words, game.words, game.foundSet);
-  for (const el of boardEl.children) el.classList.toggle("family", extendTiles.includes(Number(el.dataset.i)));
+  const { msg, extendTiles, altTiles } = familyHint(root, words, game.words, game.foundSet, game.board);
+  for (const el of boardEl.children) {
+    const i = Number(el.dataset.i);
+    el.classList.toggle("family", extendTiles.includes(i));
+    el.classList.toggle("family-alt", altTiles.includes(i));
+  }
   if (game.hint) return;
   $("hint-msg").textContent = msg;
   $("hint-msg").classList.add("active");

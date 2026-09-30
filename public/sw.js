@@ -1,5 +1,5 @@
 // Offline cache. Bump VERSION whenever any file in public/ changes.
-const VERSION = "wg-v2";
+const VERSION = "wg-v3";
 const FILES = [
   "./", "index.html", "styles.css", "app.js", "engine.js", "coach.js", "words.txt",
   "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png", "egg.gif",

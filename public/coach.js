@@ -2,7 +2,7 @@
 // player's hit rate per pattern, builds post-round lessons and picks hints.
 // No DOM access, so it runs in node tests too.
 
-import { scoreWord } from "./engine.js";
+import { scoreWord, neighbors } from "./engine.js";
 
 // Patterns we teach. Labels read as "<n> words with ___" / "Work on ___".
 export const TAGS = {
@@ -359,13 +359,32 @@ export function unfoundRelatives(root, words, foundSet) {
   return out;
 }
 
+// Tiles spelling `letters` in a chain whose first tile touches `from`, avoiding `used`.
+// Returns the tile path or null.
+function traceFrom(board, from, letters, used) {
+  const adj = neighbors(Math.round(Math.sqrt(board.length)));
+  const walk = (at, rest, path) => {
+    if (!rest) return path;
+    for (const j of adj[at]) {
+      if (used.has(j) || path.includes(j) || !rest.startsWith(board[j])) continue;
+      const got = walk(j, rest.slice(board[j].length), [...path, j]);
+      if (got) return got;
+    }
+    return null;
+  };
+  return walk(from, letters, []);
+}
+
 // What a family reminder shows: a message saying *how* the found word leads to more
-// words, plus the tiles where it can be extended (the S after RATE, the G before it).
-// The root's own tiles are never the point; the player already spelled it.
-export function familyHint(root, relatives, words, foundSet) {
+// words, the tiles that extend it (glow), and, when a relative needs the word traced a
+// different way, the other copy of the letter to go through (outlined). The root's own
+// tiles are never highlighted; the player already spelled it.
+export function familyHint(root, relatives, words, foundSet, board) {
   const rootPath = words.get(root).path;
-  const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const n = rootPath.length;
+  const used = new Set(rootPath);
   const extendTiles = new Set();
+  const altTiles = new Set();
   let extend = 0, anagram = 0, inside = 0;
   for (const w of relatives) {
     if (foundSet.has(w)) continue;
@@ -373,18 +392,30 @@ export function familyHint(root, relatives, words, foundSet) {
     if (kind === "anagram") { anagram++; continue; }
     if (w.length < root.length) { inside++; continue; }
     extend++;
-    // Only point at a tile when the relative really runs through the root's tiles.
+    // First choice: extend straight off the tiles the player used.
+    const after = w.startsWith(root) && traceFrom(board, rootPath[n - 1], w.slice(root.length), used);
+    if (after) { extendTiles.add(after[0]); continue; }
+    const before = w.endsWith(root) &&
+      traceFrom(board.map((t) => [...t].reverse().join("")), rootPath[0],
+        [...w.slice(0, w.length - root.length)].reverse().join(""), used);
+    if (before) { extendTiles.add(before[0]); continue; }
+    // Otherwise the relative spells the root through different tiles (PIE via the other E).
     const p = words.get(w).path;
-    const n = rootPath.length;
-    if (w.startsWith(root) && same(p.slice(0, n), rootPath)) extendTiles.add(p[n]);
-    else if (w.endsWith(root) && same(p.slice(p.length - n), rootPath)) extendTiles.add(p[p.length - n - 1]);
+    const [part, ext] = w.startsWith(root) ? [p.slice(0, n), p[n]] : [p.slice(p.length - n), p[p.length - n - 1]];
+    part.forEach((tile, k) => { if (tile !== rootPath[k]) altTiles.add(tile); });
+    extendTiles.add(ext);
   }
   const left = extend + anagram + inside;
   const ways = [];
-  if (extend) ways.push(extendTiles.size ? `add the glowing ${extendTiles.size === 1 ? "letter" : "letters"}` : "add letters to either end");
+  if (extend) ways.push(extendTiles.size ? `add ${extendTiles.size === 1 ? "the glowing letter" : "a glowing letter"}` : "add letters to either end");
   if (anagram) ways.push("rearrange it");
   if (inside) ways.push("look for a word inside it");
   const tip = ways.length > 1 ? `${ways.slice(0, -1).join(", ")} or ${ways[ways.length - 1]}` : ways[0];
-  const msg = `You found ${root.toUpperCase()}. ${left} more ${left === 1 ? "word is" : "words are"} related: ${tip}.`;
-  return { msg, extendTiles: [...extendTiles], left };
+  let msg = `You found ${root.toUpperCase()}. ${left} more ${left === 1 ? "word is" : "words are"} related: ${tip}.`;
+  if (altTiles.size) {
+    const letters = [...altTiles].map((i) => board[i].toUpperCase());
+    const what = altTiles.size === 1 ? `the outlined ${letters[0]}` : "the outlined letters";
+    msg += ` Trace ${root.toUpperCase()} through ${what} first.`;
+  }
+  return { msg, extendTiles: [...extendTiles], altTiles: [...altTiles], left };
 }
