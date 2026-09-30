@@ -359,7 +359,32 @@ export function unfoundRelatives(root, words, foundSet) {
   return out;
 }
 
-export function familyMessage(root, relatives, foundSet) {
-  const left = relatives.filter((w) => !foundSet.has(w)).length;
-  return `${root.toUpperCase()} has ${left} ${left === 1 ? "relative" : "relatives"} you haven't found.`;
+// What a family reminder shows: a message saying *how* the found word leads to more
+// words, plus the tiles where it can be extended (the S after RATE, the G before it).
+// The root's own tiles are never the point; the player already spelled it.
+export function familyHint(root, relatives, words, foundSet) {
+  const rootPath = words.get(root).path;
+  const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const extendTiles = new Set();
+  let extend = 0, anagram = 0, inside = 0;
+  for (const w of relatives) {
+    if (foundSet.has(w)) continue;
+    const kind = relation(root, w);
+    if (kind === "anagram") { anagram++; continue; }
+    if (w.length < root.length) { inside++; continue; }
+    extend++;
+    // Only point at a tile when the relative really runs through the root's tiles.
+    const p = words.get(w).path;
+    const n = rootPath.length;
+    if (w.startsWith(root) && same(p.slice(0, n), rootPath)) extendTiles.add(p[n]);
+    else if (w.endsWith(root) && same(p.slice(p.length - n), rootPath)) extendTiles.add(p[p.length - n - 1]);
+  }
+  const left = extend + anagram + inside;
+  const ways = [];
+  if (extend) ways.push(extendTiles.size ? `add the glowing ${extendTiles.size === 1 ? "letter" : "letters"}` : "add letters to either end");
+  if (anagram) ways.push("rearrange it");
+  if (inside) ways.push("look for a word inside it");
+  const tip = ways.length > 1 ? `${ways.slice(0, -1).join(", ")} or ${ways[ways.length - 1]}` : ways[0];
+  const msg = `You found ${root.toUpperCase()}. ${left} more ${left === 1 ? "word is" : "words are"} related: ${tip}.`;
+  return { msg, extendTiles: [...extendTiles], left };
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildTrie, solve, generateGame, makeRng } from "../public/engine.js";
 import { patternTags, relation, analyzeRound, updateSpotting, hitRate, weakestPatterns,
   buildLessons, pickHintTarget, hintStep, strength,
-  pickStarter, starterLetters, starterMessage, unfoundRelatives, familyMessage } from "../public/coach.js";
+  pickStarter, starterLetters, starterMessage, unfoundRelatives, familyHint } from "../public/coach.js";
 
 const trie = buildTrie(readFileSync(new URL("../public/words.txt", import.meta.url), "utf8"));
 
@@ -104,5 +104,14 @@ const rb = ["r","a","t","e", "x","x","x","s", "x","x","x","x", "x","x","x","x"];
 const rw = solve(rb, trie, 3);
 const rel = unfoundRelatives("rate", rw, new Set(["rate"]));
 assert.ok(rel.includes("rates") && !rel.includes("rate"), rel.join());
-assert.match(familyMessage("rate", rel, new Set(["rate", "rates"])), /^RATE has \d+ relatives? you haven't found\.$/);
+// RODE on the board from the player's screenshot: ERODE extends it at the E beside the R.
+const rodeBoard = ["h","a","w","x", "w","h","t","k", "o","r","o","e", "n","e","i","d"];
+const rodeWords = solve(rodeBoard, trie, 3);
+const rodeRel = unfoundRelatives("rode", rodeWords, new Set(["rode"]));
+const fh = familyHint("rode", rodeRel, rodeWords, new Set(["rode"]));
+console.log("family:", rodeRel.join(", "), "->", fh.msg, "glow", fh.extendTiles);
+assert.ok(rodeRel.includes("erode"));
+assert.ok(fh.extendTiles.includes(13)); // the E below-left of R
+assert.match(fh.msg, /^You found RODE\. \d+ more words are related: .*glowing letter/);
+assert.ok(!fh.extendTiles.some((i) => rodeWords.get("rode").path.includes(i)));
 console.log("coach tests passed");

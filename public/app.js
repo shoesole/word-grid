@@ -5,7 +5,7 @@ import {
 import {
   analyzeRound, updateSpotting, buildLessons, pickHintTarget, hintStep, hitRate,
   weakestPatterns, HINT_COSTS, pickStarter, starterMessage,
-  relation, unfoundRelatives, familyMessage,
+  relation, unfoundRelatives, familyHint,
 } from "./coach.js";
 
 const $ = (id) => document.getElementById(id);
@@ -277,10 +277,14 @@ $("quit").addEventListener("click", () => {
 // After a dry spell (the "Starter after" setting), highlight the opening tiles of a
 // few unfound words (free). If still stuck, extend the opening by a tile.
 const STARTER_EXTEND = 12;
-// If you find a word with relatives and don't come back to any of them within this
-// many seconds, the Coach points back at it. The reminder lapses after the same time
-// without progress.
-const FAMILY_REMIND = 20;
+// If you find a word with relatives, don't come back to any of them within this many
+// seconds, *and* you've gone quiet (the "Starter after" delay, or 15 s when starters
+// are off), the Coach points back at it. It lapses after the same time without progress.
+const FAMILY_REMIND = 25;
+
+function quietNeeded() {
+  return settings.starter === "off" ? 15 : Number(settings.starter);
+}
 
 function stuckDelay() {
   return Number(settings.starter);
@@ -312,15 +316,16 @@ function familyNudge(t) {
     }
     return !!game.family;
   }
-  const due = game.families.find((p) => !p.done && t - p.at >= FAMILY_REMIND);
+  // Only step in when you're stuck, not while you're finding other words.
+  if (t - game.lastFindAt < quietNeeded()) return false;
+  // Most recent abandoned family first: it's freshest in mind.
+  const due = game.families.filter((p) => !p.done && t - p.at >= FAMILY_REMIND).pop();
   if (!due) return false;
   due.done = true;
   const relatives = unfoundRelatives(due.root, game.words, game.foundSet);
   if (!relatives.length) return false;
   clearStarter();
   game.family = { root: due.root, words: relatives, shownAt: t, progressAt: t };
-  const path = game.words.get(due.root).path;
-  for (const el of boardEl.children) el.classList.toggle("family", path.includes(Number(el.dataset.i)));
   showFamilyMessage();
   beep(600, 0.1, "sine", 0.05);
   return true;
@@ -331,10 +336,14 @@ function clearFamily() {
   for (const el of boardEl.children) el.classList.remove("family");
 }
 
+// Glow the tiles where the found word can be extended; say how to get the rest.
 function showFamilyMessage() {
-  if (!game.family || game.hint) return;
+  if (!game.family) return;
   const { root, words } = game.family;
-  $("hint-msg").textContent = familyMessage(root, words, game.foundSet);
+  const { msg, extendTiles } = familyHint(root, words, game.words, game.foundSet);
+  for (const el of boardEl.children) el.classList.toggle("family", extendTiles.includes(Number(el.dataset.i)));
+  if (game.hint) return;
+  $("hint-msg").textContent = msg;
   $("hint-msg").classList.add("active");
 }
 

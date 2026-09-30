@@ -30,11 +30,12 @@ Words found from a starter score normally but don't count toward your profile.
 Tapping Hint while a starter is showing points at one of its words.
 
 **Family reminders (free):** when you find a word that has common relatives on the
-board (SIDE → SIDES, IDES) and don't find any of them within 20 s, the Coach outlines
-the word's tiles: "SIDE has 2 relatives you haven't found." Finding any relative in
-that window counts as coming back and cancels the reminder. The reminder takes priority
-over a starter, works even with starters off, and lapses after 20 s without progress.
-Relatives found from it don't count toward your profile.
+board (ZONE → ZONES, ZONAL) and don't come back to any of them within 25 s, the Coach
+steps in once you've also gone quiet (the "Starter after" delay, or 15 s if starters
+are off). It glows the tiles that extend your word and says how to get the rest:
+"You found ZONE. 2 more words are related: add the glowing letter or look for a word
+inside it." It lapses after 25 s without progress. Relatives found from it don't count
+toward your profile.
 
 Hints step up in detail and cost points: pattern cue (−1) → starting tile (−1)
 → shape plus key letters (−1) → full path (−2). Words found with a hint don't count
