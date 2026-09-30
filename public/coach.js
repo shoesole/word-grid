@@ -347,3 +347,19 @@ export function starterMessage(board, starter, foundSet) {
   const left = starter.words.filter((w) => !foundSet.has(w)).length;
   return `${starterLetters(board, starter)} starts ${left} ${left === 1 ? "word" : "words"} you haven't found.`;
 }
+
+// ---------- Word-family reminders ----------
+
+// Common relatives of `root` still on the board and unfound (RATE -> RATES, GRATE, TEAR).
+export function unfoundRelatives(root, words, foundSet) {
+  const out = [];
+  for (const [w, { tier }] of words) {
+    if (tier <= TEACHABLE_TIER && !foundSet.has(w) && relation(root, w)) out.push(w);
+  }
+  return out;
+}
+
+export function familyMessage(root, relatives, foundSet) {
+  const left = relatives.filter((w) => !foundSet.has(w)).length;
+  return `${root.toUpperCase()} has ${left} ${left === 1 ? "relative" : "relatives"} you haven't found.`;
+}

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildTrie, solve, generateGame, makeRng } from "../public/engine.js";
 import { patternTags, relation, analyzeRound, updateSpotting, hitRate, weakestPatterns,
   buildLessons, pickHintTarget, hintStep, strength,
-  pickStarter, starterLetters, starterMessage } from "../public/coach.js";
+  pickStarter, starterLetters, starterMessage, unfoundRelatives, familyMessage } from "../public/coach.js";
 
 const trie = buildTrie(readFileSync(new URL("../public/words.txt", import.meta.url), "utf8"));
 
@@ -99,4 +99,10 @@ const shBoard = ["s","h","o","t", "x","e","x","x", "x","x","x","x", "x","x","x",
 const shWords = solve(shBoard, trie, 3);
 const sh = pickStarter(shWords, new Set(), {}, trie, { rng: makeRng(1) });
 assert.equal(starterLetters(shBoard, sh), "SH");
+// Family reminders: unfound common relatives of a found word.
+const rb = ["r","a","t","e", "x","x","x","s", "x","x","x","x", "x","x","x","x"];
+const rw = solve(rb, trie, 3);
+const rel = unfoundRelatives("rate", rw, new Set(["rate"]));
+assert.ok(rel.includes("rates") && !rel.includes("rate"), rel.join());
+assert.match(familyMessage("rate", rel, new Set(["rate", "rates"])), /^RATE has \d+ relatives? you haven't found\.$/);
 console.log("coach tests passed");

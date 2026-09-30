@@ -5,6 +5,7 @@ import {
 import {
   analyzeRound, updateSpotting, buildLessons, pickHintTarget, hintStep, hitRate,
   weakestPatterns, HINT_COSTS, pickStarter, starterMessage,
+  relation, unfoundRelatives, familyMessage,
 } from "./coach.js";
 
 const $ = (id) => document.getElementById(id);
@@ -159,6 +160,7 @@ function startGame(mode) {
     path: [], tracing: false, flashTimer: 0,
     hint: null, hintsUsed: 0, hintCost: 0, assisted: new Set(), lastFindAt: 0,
     starter: null, starterAt: 0,
+    families: [], family: null,
   };
 
   renderTiles($("board"), board, size);
@@ -275,13 +277,18 @@ $("quit").addEventListener("click", () => {
 // After a dry spell (the "Starter after" setting), highlight the opening tiles of a
 // few unfound words (free). If still stuck, extend the opening by a tile.
 const STARTER_EXTEND = 12;
+// If you find a word with relatives and don't come back to any of them within this
+// many seconds, the Coach points back at it. The reminder lapses after the same time
+// without progress.
+const FAMILY_REMIND = 20;
 
 function stuckDelay() {
   return Number(settings.starter);
 }
 
 function nudge(t) {
-  if (game.hint || settings.starter === "off") return; // a paid hint is already guiding
+  if (game.hint) return; // a paid hint is already guiding
+  if (familyNudge(t) || settings.starter === "off") return;
   if (!game.starter && t - game.lastFindAt >= stuckDelay()) {
     const s = pickStarter(game.words, game.foundSet, profile.spot, trie);
     if (s) setStarter(s, t);
@@ -291,6 +298,65 @@ function nudge(t) {
     const s = game.starter.tiles.length < 3 && pickStarter(game.words, game.foundSet, profile.spot, trie, { tiles: 3, within: game.starter });
     if (s) setStarter({ ...s, final: true }, t);
     else game.starter.final = true;
+  }
+}
+
+// Returns true while a family reminder owns the nudge slot.
+function familyNudge(t) {
+  const f = game.family;
+  if (f) {
+    if (t - Math.max(f.shownAt, f.progressAt) >= FAMILY_REMIND) {
+      clearFamily();
+      $("hint-msg").textContent = "Stuck? A hint costs a point or two.";
+      $("hint-msg").classList.remove("active");
+    }
+    return !!game.family;
+  }
+  const due = game.families.find((p) => !p.done && t - p.at >= FAMILY_REMIND);
+  if (!due) return false;
+  due.done = true;
+  const relatives = unfoundRelatives(due.root, game.words, game.foundSet);
+  if (!relatives.length) return false;
+  clearStarter();
+  game.family = { root: due.root, words: relatives, shownAt: t, progressAt: t };
+  const path = game.words.get(due.root).path;
+  for (const el of boardEl.children) el.classList.toggle("family", path.includes(Number(el.dataset.i)));
+  showFamilyMessage();
+  beep(600, 0.1, "sine", 0.05);
+  return true;
+}
+
+function clearFamily() {
+  game.family = null;
+  for (const el of boardEl.children) el.classList.remove("family");
+}
+
+function showFamilyMessage() {
+  if (!game.family || game.hint) return;
+  const { root, words } = game.family;
+  $("hint-msg").textContent = familyMessage(root, words, game.foundSet);
+  $("hint-msg").classList.add("active");
+}
+
+// Track word families as words are found: start a timer for a new family,
+// cancel it if the player comes back to it, and credit reminder-assisted finds.
+function trackFamilies(word, t) {
+  let related = false;
+  for (const p of game.families) {
+    if (relation(word, p.root)) { p.done = true; related = true; }
+  }
+  const f = game.family;
+  if (f?.words.includes(word)) {
+    game.assisted.add(word);
+    f.progressAt = t;
+    if (f.words.every((w) => game.foundSet.has(w))) {
+      clearFamily();
+      if (!game.hint) $("hint-msg").textContent = "Whole family found. Nice.";
+    } else {
+      showFamilyMessage();
+    }
+  } else if (!related && unfoundRelatives(word, game.words, game.foundSet).length) {
+    game.families.push({ root: word, at: t, done: false });
   }
 }
 
@@ -339,8 +405,8 @@ $("hint-btn").addEventListener("click", () => {
   if (!game?.running || game.mode !== "train") return;
   unlockAudio();
   if (!game.hint) {
-    // While a starter is showing, hints point at one of its words.
-    const only = game.starter ? new Set(game.starter.words) : null;
+    // While a family reminder or starter is showing, hints point at one of its words.
+    const only = game.family ? new Set(game.family.words) : game.starter ? new Set(game.starter.words) : null;
     const target = pickHintTarget(game.words, game.foundSet, profile.spot, trie, Math.random, only);
     if (!target) { $("hint-msg").textContent = "You've found every common word!"; return; }
     game.hint = { target, level: -1, path: game.words.get(target.word).path };
@@ -482,6 +548,7 @@ function finishTrace() {
     } else {
       $("hint-btn").classList.remove("ready");
     }
+    if (game.mode === "train") trackFamilies(word, game.lastFindAt);
     if (game.starter?.words.includes(word)) {
       game.assisted.add(word);
       if (game.starter.words.every((w) => game.foundSet.has(w))) {

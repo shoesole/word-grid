@@ -29,6 +29,13 @@ your weak patterns. If you're still stuck 12 s later, it adds a third tile ("SHO
 Words found from a starter score normally but don't count toward your profile.
 Tapping Hint while a starter is showing points at one of its words.
 
+**Family reminders (free):** when you find a word that has common relatives on the
+board (SIDE → SIDES, IDES) and don't find any of them within 20 s, the Coach outlines
+the word's tiles: "SIDE has 2 relatives you haven't found." Finding any relative in
+that window counts as coming back and cancels the reminder. The reminder takes priority
+over a starter, works even with starters off, and lapses after 20 s without progress.
+Relatives found from it don't count toward your profile.
+
 Hints step up in detail and cost points: pattern cue (−1) → starting tile (−1)
 → shape plus key letters (−1) → full path (−2). Words found with a hint don't count
 toward your profile.
