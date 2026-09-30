@@ -708,9 +708,9 @@ $("play-free").addEventListener("click", () => startGame("free"));
 
 // ---------- Easter egg ----------
 // Off by default. Tapping the home logo 5 times toggles it for this device.
-// Once on, it pops up after 15 minutes of time with the app open, at most once a day.
+// Once on, it pops up after 20 minutes of time with the app open, at most once a day.
 
-const EGG_AFTER = 15 * 60;
+const EGG_AFTER = 20 * 60;
 let eggTaps = [];
 
 document.querySelector(".logo").addEventListener("click", () => {
