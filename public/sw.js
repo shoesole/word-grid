@@ -2,7 +2,7 @@
 const VERSION = "wg-v1";
 const FILES = [
   "./", "index.html", "styles.css", "app.js", "engine.js", "coach.js", "words.txt",
-  "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png",
+  "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png", "egg.gif",
 ];
 
 self.addEventListener("install", (e) => {

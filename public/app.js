@@ -706,6 +706,53 @@ $("play-train").addEventListener("click", () => startGame("train"));
 $("play-rival").addEventListener("click", () => startGame("rival"));
 $("play-free").addEventListener("click", () => startGame("free"));
 
+// ---------- Easter egg ----------
+// Off by default. Tapping the home logo 5 times toggles it for this device.
+// Once on, it pops up after 15 minutes of time with the app open, at most once a day.
+
+const EGG_AFTER = 15 * 60;
+let eggTaps = [];
+
+document.querySelector(".logo").addEventListener("click", () => {
+  const now = Date.now();
+  eggTaps = [...eggTaps.filter((t) => now - t < 3000), now];
+  if (eggTaps.length < 5) return;
+  eggTaps = [];
+  const on = !load("wg.egg", { on: false }).on;
+  save("wg.egg", { on, day: "", seconds: 0, shown: false });
+  toast(on ? "Surprise armed" : "Surprise off");
+});
+
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.hidden = false;
+  setTimeout(() => { el.hidden = true; }, 1800);
+}
+
+setInterval(() => {
+  if (document.hidden) return;
+  const egg = load("wg.egg", { on: false });
+  if (!egg.on) return;
+  const today = new Date().toDateString();
+  if (egg.day !== today) Object.assign(egg, { day: today, seconds: 0, shown: false });
+  if (egg.shown) return;
+  egg.seconds += 5;
+  if (egg.seconds >= EGG_AFTER) {
+    egg.shown = true;
+    showEgg();
+  }
+  save("wg.egg", egg);
+}, 5000);
+
+function showEgg() {
+  pause(); // don't let the round clock run while it's up
+  $("egg-img").src = "egg.gif";
+  $("egg").hidden = false;
+}
+
+$("egg-close").addEventListener("click", () => { $("egg").hidden = true; });
+
 // ---------- Boot ----------
 
 renderHome();
