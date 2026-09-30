@@ -7,10 +7,11 @@ import {
   weakestPatterns, HINT_COSTS, pickStarter, starterMessage,
   relation, unfoundRelatives, familyHint,
 } from "./coach.js";
+import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
 // Bump together with VERSION in sw.js.
-const APP_VERSION = "4";
+const APP_VERSION = "5";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
@@ -639,6 +640,7 @@ function endGame() {
   renderTiles($("mini-board"), game.board, game.size);
   ensureMiniTrace();
   showPath([]);
+  hideDefinition();
   selectTab("yours");
   setTimeout(() => show("results"), 700);
 }
@@ -658,7 +660,55 @@ $("lessons").addEventListener("click", (e) => {
   for (const r of document.querySelectorAll("#word-list .active, #lessons .active")) r.classList.remove("active");
   b.classList.add("active");
   showPath(game.words.get(b.dataset.w).path);
+  showDefinition(b.dataset.w);
 });
+
+// ---------- Definitions ----------
+
+let defSeq = 0;
+
+function hideDefinition() {
+  defSeq++;
+  $("definition").hidden = true;
+  $("mini-hint").hidden = false;
+}
+
+// Build with textContent: definitions come from an outside site.
+function defLine(word, pos, text) {
+  const line = document.createElement("div");
+  const b = document.createElement("b");
+  b.textContent = word.toUpperCase();
+  const p = document.createElement("span");
+  p.className = "def-pos";
+  p.textContent = pos;
+  line.append(b, " ", p);
+  if (text) {
+    const t = document.createElement("div");
+    t.className = "def-text";
+    t.textContent = text;
+    line.append(t);
+  }
+  return line;
+}
+
+async function showDefinition(word) {
+  const seq = ++defSeq;
+  const el = $("definition");
+  $("mini-hint").hidden = true;
+  el.hidden = false;
+  el.replaceChildren(defLine(word, "looking up…"));
+  let d, failed = false;
+  try { d = await define(word); } catch { failed = true; }
+  if (seq !== defSeq) return; // a newer tap won
+  if (failed) return el.replaceChildren(defLine(word, "", "Couldn't reach the dictionary. Check your connection and tap again."));
+  if (!d) return el.replaceChildren(defLine(word, "", "No dictionary entry found for this one."));
+  el.replaceChildren(defLine(word, d.pos, d.text));
+  if (d.base) {
+    const base = defLine(d.base.word, d.base.pos, d.base.text);
+    base.className = "def-base";
+    el.append(base);
+  }
+}
 
 function ensureMiniTrace() {
   if ($("mini-trace")) return;
@@ -708,7 +758,7 @@ function selectTab(tab) {
 
 $("tabs").addEventListener("click", (e) => {
   const b = e.target.closest("button");
-  if (b) { selectTab(b.dataset.tab); showPath([]); }
+  if (b) { selectTab(b.dataset.tab); showPath([]); hideDefinition(); }
 });
 $("word-list").addEventListener("click", (e) => {
   const b = e.target.closest(".word-row");
@@ -716,6 +766,7 @@ $("word-list").addEventListener("click", (e) => {
   for (const r of document.querySelectorAll("#word-list .active, #lessons .active")) r.classList.remove("active");
   b.classList.add("active");
   showPath(game.words.get(b.dataset.w).path);
+  showDefinition(b.dataset.w);
 });
 $("again").addEventListener("click", () => startGame(game.mode));
 $("home-btn").addEventListener("click", () => { renderHome(); show("home"); });

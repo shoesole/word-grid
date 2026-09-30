@@ -6,7 +6,9 @@ A Boggle-style word game for iPhone (installable web app), with no ads. Two mode
 - **Race the Rival**: race a bot that adapts to your level.
 - **Free Play**: just you and the clock.
 
-Every mode ends with 2–3 short lessons built from that board.
+Every mode ends with 2–3 short lessons built from that board. Tap any word on the
+results screen to see its path on the board and its definition (from Wiktionary;
+inflections like "plural of bet" also show the base word's meaning).
 
 ## How the Coach trains you (`coach.js`)
 
@@ -57,17 +59,20 @@ gradually over the round, as a person would.
 - `public/`: the whole app (static files, no build step)
   - `engine.js`: dice, solver, scoring, Rival bot, adaptation (no DOM)
   - `coach.js`: pattern tagging, spotting profile, lessons, hints (no DOM)
+  - `define.js`: word definitions from Wiktionary's REST API, cached in localStorage
   - `app.js`: UI, touch tracing, timer, results
   - `words.txt`: dictionary (built, do not edit by hand)
   - `sw.js`: offline support (network-first). **Bump `VERSION` here and `APP_VERSION` in `app.js` whenever anything in `public/` changes.**
 - `scripts/build_dict.py`: rebuilds `words.txt` from `data/` (ENABLE + SCOWL, gitignored)
-- `test/`: `node test/engine.test.mjs && node test/coach.test.mjs`
+- `test/`: `node test/engine.test.mjs && node test/coach.test.mjs && node test/define.test.mjs`
 
 ## Run locally
 
     cd public && python3 -m http.server 8000
 
-## Word lists
+## Word lists and definitions
+
+- Definitions: Wiktionary (CC BY-SA), fetched live when you tap a word.
 
 - ENABLE word list (enable1.txt): public domain.
 - SCOWL (commonness tiers): see CREDITS.txt for the copyright and permission notice.

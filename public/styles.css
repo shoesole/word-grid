@@ -207,6 +207,14 @@ button:disabled { opacity: 0.5; cursor: default; }
 .board.mini .tile { box-shadow: 0 2px 0 #cbbf9f; }
 .board.mini .tile.start { background: var(--good); box-shadow: 0 2px 0 #1c8a57; }
 
+.definition {
+  margin-top: 10px; background: var(--bg-2); border-radius: 12px; padding: 10px 14px;
+  font-size: 15px; line-height: 1.35;
+}
+.definition[hidden] { display: none; }
+.def-pos { color: var(--muted); font-style: italic; font-size: 14px; }
+.def-text { margin-top: 2px; }
+.def-base { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .lessons { display: grid; gap: 10px; margin-top: 14px; }
 .lesson { background: var(--bg-2); border-radius: 12px; padding: 12px 14px; border-left: 3px solid var(--rival); }
 .lesson h3 { margin: 0 0 4px; font-size: 15px; }
