@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { buildTrie, solve, generateGame, makeRng } from "../public/engine.js";
 import { patternTags, relation, analyzeRound, updateSpotting, hitRate, weakestPatterns,
-  buildLessons, pickHintTarget, hintStep, strength } from "../public/coach.js";
+  buildLessons, pickHintTarget, hintStep, strength,
+  pickStarter, starterLetters, starterMessage } from "../public/coach.js";
 
 const trie = buildTrie(readFileSync(new URL("../public/words.txt", import.meta.url), "utf8"));
 
@@ -76,4 +77,26 @@ assert.ok(hitRate(weak, "ing") < hitRate(weak, "s"));
 
 // Profiles saved before `expected` existed start fresh instead of misreading.
 assert.equal(strength({ ing: { seen: 10, hit: 1 } }, "ing"), 1);
+// Starters: an opening shared by several unfound words; extending narrows to 3 tiles.
+const st = pickStarter(g.words, found, spot, trie, { rng: makeRng(2) });
+assert.equal(st.tiles.length, 2);
+for (const w of st.words) {
+  assert.deepEqual(g.words.get(w).path.slice(0, 2), st.tiles);
+  assert.ok(!found.has(w));
+}
+const st3 = pickStarter(g.words, found, spot, trie, { tiles: 3, within: st, rng: makeRng(2) });
+if (st3) {
+  assert.deepEqual(st3.tiles.slice(0, 2), st.tiles);
+  assert.ok(st3.words.every((w) => st.words.includes(w)));
+}
+console.log("starter:", starterMessage(g.board, st, found), st.words.join(", "),
+  st3 ? `| then ${starterLetters(g.board, st3)}: ${st3.words.join(", ")}` : "");
+// Hints can be limited to the starter's words.
+const limited = pickHintTarget(g.words, found, spot, trie, makeRng(1), new Set(st.words));
+assert.ok(st.words.includes(limited.word));
+// SH on a hand-built board: S-H begins SHE, SHOE, SHOT... (tiles 0,1).
+const shBoard = ["s","h","o","t", "x","e","x","x", "x","x","x","x", "x","x","x","x"];
+const shWords = solve(shBoard, trie, 3);
+const sh = pickStarter(shWords, new Set(), {}, trie, { rng: makeRng(1) });
+assert.equal(starterLetters(shBoard, sh), "SH");
 console.log("coach tests passed");

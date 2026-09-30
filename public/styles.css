@@ -159,6 +159,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--rival), 0 4px 0 #cbbf9f; } }
 .tile.glow { background: #a9d8ff; box-shadow: 0 4px 0 #5f9fd6; }
 .tile.guide { background: #7cc4ff; box-shadow: 0 4px 0 #3d86c6; }
+.tile.starter { outline: 3px dashed var(--rival); outline-offset: 3px; }
+.tile.starter-first { outline-style: solid; background: #e4f2ff; }
 /* Hint highlights come before .sel so a traced tile always shows as selected. */
 .tile.sel { background: var(--accent); box-shadow: 0 4px 0 #b87200; transform: translateY(1px); }
 .board.good .tile.sel { background: var(--good); box-shadow: 0 4px 0 #1c8a57; }

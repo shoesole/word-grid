@@ -217,11 +217,13 @@ function tipFor(tag) {
 
 // Choose the word to hint toward: a common word in the player's weakest pattern,
 // preferring medium lengths and relatives of words already found (it teaches the habit).
-export function pickHintTarget(words, foundSet, spot, trie, rng = Math.random) {
+// `only` (optional Set) limits targets to those words, e.g. the active starter's.
+export function pickHintTarget(words, foundSet, spot, trie, rng = Math.random, only = null) {
+  if (only && ![...only].some((w) => !foundSet.has(w))) only = null;
   let best = null;
   for (const tierCap of [TEACHABLE_TIER, 2]) {
     for (const [word, { tier }] of words) {
-      if (tier > tierCap || foundSet.has(word)) continue;
+      if (tier > tierCap || foundSet.has(word) || (only && !only.has(word))) continue;
       const tags = patternTags(word, trie);
       const rel = relativesIn(word, foundSet);
       if (rel.length) tags.push("family");
@@ -299,4 +301,49 @@ export function hintStep(target, level, board, path) {
     return { cost, msg: `Shape: ${shape}`, pulse: [path[0]], glow, guide: [] };
   }
   return { cost, msg: "Follow the glow.", pulse: [path[0]], glow: [], guide: path.slice() };
+}
+
+// ---------- Starters ----------
+
+// A "starter" is a run of tiles that begins several unfound common words, like
+// the S-H that starts SHOT, SHORE and SHOE. Showing it when the player is stuck
+// trains them to spot word openings. Starters are keyed by tile positions, not
+// letters, so the highlight is exact.
+//   tiles:  number of opening tiles to show (2, then 3 when extending)
+//   within: optional previous starter to extend (only its words, same opening)
+export function pickStarter(words, foundSet, spot, trie, { tiles = 2, within = null, rng = Math.random } = {}) {
+  const groups = new Map();
+  for (const tierCap of [TEACHABLE_TIER, 2]) {
+    for (const [word, { tier, path }] of words) {
+      if (tier > tierCap || foundSet.has(word) || path.length <= tiles) continue;
+      if (within && !within.words.includes(word)) continue;
+      const key = path.slice(0, tiles).join(",");
+      const tags = patternTags(word, trie);
+      if (relativesIn(word, foundSet).length) tags.push("family");
+      const weak = tags.length ? Math.max(...tags.map((t) => need(spot, t) * (BROAD[t] ?? 1))) : 0;
+      const weight = (word.length >= 4 && word.length <= 6 ? 1 : 0.6) * (0.4 + weak);
+      const g = groups.get(key) || { tiles: path.slice(0, tiles), words: [], score: 0 };
+      g.words.push(word);
+      // Several words per opening teaches more, with diminishing returns past four.
+      g.score += g.words.length <= 4 ? weight : weight * 0.25;
+      groups.set(key, g);
+    }
+    if (groups.size) break;
+  }
+  let best = null;
+  for (const g of groups.values()) {
+    const score = g.score + rng() * 0.2;
+    if (!best || score > best.score) best = { ...g, score };
+  }
+  return best;
+}
+
+// The letters a starter spells, e.g. "SH" or "QUI".
+export function starterLetters(board, starter) {
+  return starter.tiles.map((i) => board[i]).join("").toUpperCase();
+}
+
+export function starterMessage(board, starter, foundSet) {
+  const left = starter.words.filter((w) => !foundSet.has(w)).length;
+  return `${starterLetters(board, starter)} starts ${left} ${left === 1 ? "word" : "words"} you haven't found.`;
 }

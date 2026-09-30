@@ -4,7 +4,7 @@ import {
 } from "./engine.js";
 import {
   analyzeRound, updateSpotting, buildLessons, pickHintTarget, hintStep, hitRate,
-  weakestPatterns, HINT_COSTS,
+  weakestPatterns, HINT_COSTS, pickStarter, starterMessage,
 } from "./coach.js";
 
 const $ = (id) => document.getElementById(id);
@@ -158,6 +158,7 @@ function startGame(mode) {
     elapsed: 0, resumedAt: 0, running: false, over: false,
     path: [], tracing: false, flashTimer: 0,
     hint: null, hintsUsed: 0, hintCost: 0, assisted: new Set(), lastFindAt: 0,
+    starter: null, starterAt: 0,
   };
 
   renderTiles($("board"), board, size);
@@ -213,14 +214,7 @@ function tick() {
     box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump");
   }
 
-  // Training: offer a hint after a dry spell. The better you get, the longer it waits.
-  if (game.mode === "train" && !game.hint && t - game.lastFindAt >= stuckDelay()) {
-    const btn = $("hint-btn");
-    if (!btn.classList.contains("ready")) {
-      btn.classList.add("ready");
-      $("hint-msg").textContent = "Stuck? Try a hint.";
-    }
-  }
+  if (game.mode === "train") nudge(t);
 
   updateHud(t);
   if (t >= game.duration) return endGame();
@@ -278,8 +272,49 @@ $("quit").addEventListener("click", () => {
 
 // ---------- Hints (training mode) ----------
 
+// After a dry spell, highlight the opening tiles of a few unfound words (free).
+// If still stuck, extend the opening by a tile. The better you get, the longer it waits.
+const STARTER_EXTEND = 12;
+
 function stuckDelay() {
   return 12 + 30 * hitRate(profile.spot, "all");
+}
+
+function nudge(t) {
+  if (game.hint) return; // a paid hint is already guiding
+  if (!game.starter && t - game.lastFindAt >= stuckDelay()) {
+    const s = pickStarter(game.words, game.foundSet, profile.spot, trie);
+    if (s) setStarter(s, t);
+    else game.lastFindAt = t; // every common word found; don't search again every frame
+    $("hint-btn").classList.add("ready");
+  } else if (game.starter && !game.starter.final && t - Math.max(game.lastFindAt, game.starterAt) >= STARTER_EXTEND) {
+    const s = game.starter.tiles.length < 3 && pickStarter(game.words, game.foundSet, profile.spot, trie, { tiles: 3, within: game.starter });
+    if (s) setStarter({ ...s, final: true }, t);
+    else game.starter.final = true;
+  }
+}
+
+function setStarter(starter, t) {
+  game.starter = starter;
+  game.starterAt = t;
+  for (const el of boardEl.children) {
+    const i = Number(el.dataset.i);
+    el.classList.toggle("starter", starter.tiles.includes(i));
+    el.classList.toggle("starter-first", i === starter.tiles[0]);
+  }
+  showStarterMessage();
+  beep(600, 0.1, "sine", 0.05);
+}
+
+function clearStarter() {
+  game.starter = null;
+  for (const el of boardEl.children) el.classList.remove("starter", "starter-first");
+}
+
+function showStarterMessage() {
+  if (!game.starter || game.hint) return;
+  $("hint-msg").textContent = starterMessage(game.board, game.starter, game.foundSet);
+  $("hint-msg").classList.add("active");
 }
 
 function resetHintUi(msg) {
@@ -304,7 +339,9 @@ $("hint-btn").addEventListener("click", () => {
   if (!game?.running || game.mode !== "train") return;
   unlockAudio();
   if (!game.hint) {
-    const target = pickHintTarget(game.words, game.foundSet, profile.spot, trie);
+    // While a starter is showing, hints point at one of its words.
+    const only = game.starter ? new Set(game.starter.words) : null;
+    const target = pickHintTarget(game.words, game.foundSet, profile.spot, trie, Math.random, only);
     if (!target) { $("hint-msg").textContent = "You've found every common word!"; return; }
     game.hint = { target, level: -1, path: game.words.get(target.word).path };
   }
@@ -445,6 +482,15 @@ function finishTrace() {
     } else {
       $("hint-btn").classList.remove("ready");
     }
+    if (game.starter?.words.includes(word)) {
+      game.assisted.add(word);
+      if (game.starter.words.every((w) => game.foundSet.has(w))) {
+        clearStarter();
+        if (!game.hint) $("hint-msg").textContent = "Got them all. Nice.";
+      } else {
+        showStarterMessage();
+      }
+    }
     addChip(word);
     updateHud(elapsed());
     sfx.good();
@@ -553,7 +599,7 @@ function selectTab(tab) {
   if (tab === "yours") {
     list = [...foundSet];
     if (game.mode === "rival") legend = "• = the Rival found it too";
-    if (game.mode === "train" && game.assisted.size) legend = "• = found with a hint";
+    if (game.mode === "train" && game.assisted.size) legend = "• = found with help (hint or starter)";
   } else if (tab === "rival") {
     list = [...botWords];
     legend = "• = you found it too";
