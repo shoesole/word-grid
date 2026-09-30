@@ -17,7 +17,9 @@ Each common word on a board is tagged by the pattern that unlocks it:
 - letter pairs (TH, ST, CH, …)
 - long words and words that start with a vowel
 
-A rolling hit rate per pattern (your "spotting profile", shown on the home screen)
+Each pattern's hit rate is compared with your own overall rate in the same rounds, so
+"weak" means weaker than your usual, not simply a hard pattern or a short round.
+That relative score (your "spotting profile", shown on the home screen)
 decides what the lessons cover and which word a hint points you toward.
 
 Hints step up in detail and cost points: pattern cue (−1) → starting tile (−1)

@@ -104,7 +104,7 @@ function renderSpotting() {
   $("spotting").innerHTML =
     `<h3>How much you spot (common words)</h3>` +
     row("All common words", hitRate(profile.spot, "all")) +
-    `<h3 style="margin-top:12px">Work on</h3>` +
+    `<h3 style="margin-top:12px">Work on (below your usual)</h3>` +
     weak.map((w) => row(cap(w.label), w.rate)).join("");
 }
 

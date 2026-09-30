@@ -91,37 +91,59 @@ export function analyzeRound(words, foundSet, assisted, trie) {
 }
 
 // Rolling per-pattern stats. Older rounds fade out so recent play matters most.
+// `expected` is how many finds the player's overall rate that round predicted for the
+// pattern, so hit/expected measures the pattern against the player's own norm. That
+// keeps hard patterns, short rounds and big boards from all looking like weaknesses.
 const WINDOW = 80;
 export function updateSpotting(spot, byTag) {
   const next = { ...spot };
+  const all = byTag.all;
+  const allCount = all ? all.found.length + all.missed.length : 0;
+  const roundRate = allCount ? all.found.length / allCount : 0;
   for (const [tag, { found, missed }] of Object.entries(byTag)) {
-    const s = { ...(next[tag] || { seen: 0, hit: 0 }) };
-    s.seen += found.length + missed.length;
+    const prev = next[tag];
+    const s = prev && prev.expected !== undefined ? { ...prev } : { seen: 0, hit: 0, expected: 0 };
+    const count = found.length + missed.length;
+    s.seen += count;
     s.hit += found.length;
+    s.expected += count * roundRate;
     if (s.seen > WINDOW) {
       const k = WINDOW / s.seen;
       s.seen *= k;
       s.hit *= k;
+      s.expected *= k;
     }
     next[tag] = s;
   }
   return next;
 }
 
-// Smoothed hit rate; unknown patterns sit at 0.5.
+// Smoothed absolute hit rate; unknown patterns sit at 0.5.
 export function hitRate(spot, tag) {
   const s = spot?.[tag];
   return s ? (s.hit + 1) / (s.seen + 2) : 0.5;
 }
 
-// Patterns the player misses most, once there's enough evidence.
+// Hit rate relative to the player's own overall rate: 1 = typical for you,
+// below 1 = a weak spot. Unknown patterns sit at 1.
+const PRIOR = 2;
+export function strength(spot, tag) {
+  const s = spot?.[tag];
+  if (!s || s.expected === undefined) return 1;
+  return (s.hit + PRIOR) / (s.expected + PRIOR);
+}
+
+// Patterns the player misses more than usual, once there's enough evidence.
 export function weakestPatterns(spot, n = 3, minSeen = 6) {
   return Object.keys(TAGS)
-    .filter((tag) => (spot?.[tag]?.seen ?? 0) >= minSeen)
-    .map((tag) => ({ tag, label: TAGS[tag], rate: hitRate(spot, tag) }))
-    .sort((a, b) => a.rate - b.rate)
+    .filter((tag) => (spot?.[tag]?.seen ?? 0) >= minSeen && strength(spot, tag) < 0.9)
+    .map((tag) => ({ tag, label: TAGS[tag], rate: hitRate(spot, tag), strength: strength(spot, tag) }))
+    .sort((a, b) => a.strength - b.strength)
     .slice(0, n);
 }
+
+// How much a pattern needs work, 0 (a strength) to ~1 (never spotted).
+const need = (spot, tag) => Math.max(0, 1.2 - Math.min(strength(spot, tag), 1.2));
 
 const byValue = (a, b) => scoreWord(b) - scoreWord(a) || a.localeCompare(b);
 
@@ -153,7 +175,7 @@ export function buildLessons(words, foundSet, byTag, spot) {
   // 2. Pattern: the pattern with the most misses, weighted toward long-term weak spots.
   const candidates = Object.entries(byTag)
     .filter(([tag, t]) => tag !== "all" && tag !== "family" && t.missed.length >= 2)
-    .map(([tag, t]) => ({ tag, t, score: t.missed.length * (1.5 - hitRate(spot, tag)) * (BROAD[tag] ?? 1) }))
+    .map(([tag, t]) => ({ tag, t, score: t.missed.length * (0.3 + need(spot, tag)) * (BROAD[tag] ?? 1) }))
     .sort((a, b) => b.score - a.score);
   if (candidates.length) {
     const { tag, t } = candidates[0];
@@ -204,11 +226,11 @@ export function pickHintTarget(words, foundSet, spot, trie, rng = Math.random) {
       const rel = relativesIn(word, foundSet);
       if (rel.length) tags.push("family");
       let focus = tags.length
-        ? tags.reduce((a, b) => (hitRate(spot, b) < hitRate(spot, a) ? b : a))
+        ? tags.reduce((a, b) => (need(spot, b) * (BROAD[b] ?? 1) > need(spot, a) * (BROAD[a] ?? 1) ? b : a))
         : null;
       // Relatives of found words teach the most reusable habit, so they win close calls.
-      if (rel.length && hitRate(spot, "family") <= hitRate(spot, focus) + 0.1) focus = "family";
-      const weakness = focus ? 1 - hitRate(spot, focus) : 0.3;
+      if (rel.length && strength(spot, "family") <= strength(spot, focus) + 0.15) focus = "family";
+      const weakness = focus ? need(spot, focus) * (BROAD[focus] ?? 1) : 0.1;
       const lenFit = word.length >= 4 && word.length <= 6 ? 1 : 0.6;
       const score = (weakness + (rel.length ? 0.15 : 0)) * lenFit + rng() * 0.15;
       if (!best || score > best.score) best = { word, focus, root: rel[0] ?? null, score };

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { buildTrie, solve, generateGame, makeRng } from "../public/engine.js";
 import { patternTags, relation, analyzeRound, updateSpotting, hitRate, weakestPatterns,
-  buildLessons, pickHintTarget, hintStep } from "../public/coach.js";
+  buildLessons, pickHintTarget, hintStep, strength } from "../public/coach.js";
 
 const trie = buildTrie(readFileSync(new URL("../public/words.txt", import.meta.url), "utf8"));
 
@@ -55,8 +55,25 @@ const t2 = { word: "rates", focus: "family", root: "rate" };
 assert.match(hintStep(t2, 0, board, words.get("rates").path).msg, /RATE has a relative/);
 assert.deepEqual(hintStep(t2, 2, board, words.get("rates").path).glow, [0, 1, 2, 3]);
 
-// Weakest patterns need enough evidence.
-const s2 = { ing: { seen: 10, hit: 1 }, s: { seen: 10, hit: 9 }, th: { seen: 2, hit: 0 } };
-assert.deepEqual(weakestPatterns(s2).map((p) => p.tag), ["ing", "s"]);
-assert.ok(hitRate(s2, "ing") < hitRate(s2, "s"));
+// Weakness is relative to the player's own overall rate.
+const round = (counts) => Object.fromEntries(Object.entries(counts).map(([tag, [hit, n]]) =>
+  [tag, { found: Array(hit).fill("w"), missed: Array(n - hit).fill("w") }]));
+let even = {};
+for (let i = 0; i < 5; i++) even = updateSpotting(even, round({ all: [4, 20], ing: [1, 5], long: [1, 5], s: [1, 5] }));
+assert.deepEqual(weakestPatterns(even), []); // 20% everywhere: nothing stands out
+
+let short = {}, long = {};
+for (let i = 0; i < 5; i++) {
+  short = updateSpotting(short, round({ all: [2, 20], ing: [1, 10] })); // 90s round: 10% overall
+  long = updateSpotting(long, round({ all: [8, 20], ing: [4, 10] }));  // 180s round: 40% overall
+}
+assert.ok(Math.abs(strength(short, "ing") - strength(long, "ing")) < 0.1, "same relative skill, any round length");
+
+let weak = {};
+for (let i = 0; i < 5; i++) weak = updateSpotting(weak, round({ all: [8, 40], ing: [0, 8], long: [1, 6], s: [2, 10] }));
+assert.equal(weakestPatterns(weak)[0].tag, "ing");
+assert.ok(hitRate(weak, "ing") < hitRate(weak, "s"));
+
+// Profiles saved before `expected` existed start fresh instead of misreading.
+assert.equal(strength({ ing: { seen: 10, hit: 1 } }, "ing"), 1);
 console.log("coach tests passed");
