@@ -63,6 +63,15 @@
         </div>
       </div>
       <div class="setting">
+        <span class="label">Starter after</span>
+        <div class="seg" data-setting="starter">
+          <button data-value="off">Off</button>
+          <button data-value="10">10s</button>
+          <button data-value="15">15s</button>
+          <button data-value="25">25s</button>
+        </div>
+      </div>
+      <div class="setting">
         <span class="label">Sound</span>
         <div class="seg" data-setting="sound">
           <button data-value="on">On</button>
@@ -115,6 +124,10 @@
     </div>
     <div class="mini-wrap"><div class="board mini" id="mini-board"></div></div>
     <p class="fine center" id="mini-hint">Tap any word to see it on the board.</p>
+    <div class="result-actions">
+      <button id="again" class="btn primary">Play again</button>
+      <button id="home-btn" class="btn secondary">Home</button>
+    </div>
     <div class="lessons" id="lessons"></div>
     <div class="tabs" id="tabs">
       <button data-tab="yours" class="active">Yours</button>
@@ -122,10 +135,6 @@
       <button data-tab="missed">Missed</button>
     </div>
     <div class="word-list" id="word-list"></div>
-    <div class="result-actions">
-      <button id="again" class="btn primary">Play again</button>
-      <button id="home-btn" class="btn secondary">Home</button>
-    </div>
   </section>
 
   <script type="module" src="app.js"></script>

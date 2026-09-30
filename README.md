@@ -22,7 +22,8 @@ Each pattern's hit rate is compared with your own overall rate in the same round
 That relative score (your "spotting profile", shown on the home screen)
 decides what the lessons cover and which word a hint points you toward.
 
-**Starters (free):** after a dry spell, the Coach outlines the opening tiles of a few
+**Starters (free):** after a dry spell (the "Starter after" setting: Off / 10 / 15 / 25 s,
+default 15), the Coach outlines the opening tiles of a few
 unfound common words ("SH starts 3 words you haven't found"), choosing openings tied to
 your weak patterns. If you're still stuck 12 s later, it adds a third tile ("SHO…").
 Words found from a starter score normally but don't count toward your profile.
@@ -30,8 +31,7 @@ Tapping Hint while a starter is showing points at one of its words.
 
 Hints step up in detail and cost points: pattern cue (−1) → starting tile (−1)
 → shape plus key letters (−1) → full path (−2). Words found with a hint don't count
-toward your profile. The dry spell before a starter appears gets longer as your
-overall hit rate improves.
+toward your profile.
 
 ## How the Rival adapts
 

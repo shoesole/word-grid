@@ -24,7 +24,7 @@ function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
-let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", sound: "on" });
+let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", sound: "on", starter: "15" });
 let profile = load("wg.profile", { ...DEFAULT_PROFILE, spot: {} });
 let trie = null;
 let game = null;
@@ -272,16 +272,16 @@ $("quit").addEventListener("click", () => {
 
 // ---------- Hints (training mode) ----------
 
-// After a dry spell, highlight the opening tiles of a few unfound words (free).
-// If still stuck, extend the opening by a tile. The better you get, the longer it waits.
+// After a dry spell (the "Starter after" setting), highlight the opening tiles of a
+// few unfound words (free). If still stuck, extend the opening by a tile.
 const STARTER_EXTEND = 12;
 
 function stuckDelay() {
-  return 12 + 30 * hitRate(profile.spot, "all");
+  return Number(settings.starter);
 }
 
 function nudge(t) {
-  if (game.hint) return; // a paid hint is already guiding
+  if (game.hint || settings.starter === "off") return; // a paid hint is already guiding
   if (!game.starter && t - game.lastFindAt >= stuckDelay()) {
     const s = pickStarter(game.words, game.foundSet, profile.spot, trie);
     if (s) setStarter(s, t);
