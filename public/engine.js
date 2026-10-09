@@ -163,9 +163,15 @@ function lengthWeight(n) {
   return [0, 0, 0, 1, 0.95, 0.75, 0.5, 0.3][n] ?? 0.15;
 }
 
+// Seconds a person needs to spot and trace a word: longer words take longer.
+function findGap(word, rng) {
+  return (0.6 + 0.1 * word.length) * (0.85 + rng() * 0.3);
+}
+
 // Pick the words the bot will "find" this round and when it finds them.
-// skill: target fraction of the board's total available points.
-export function planBot(words, skill, durationSec, rng = Math.random) {
+// skill:   target fraction of the board's total available points.
+// maxRate: most words per second it may find (keeps rich boards human-paced).
+export function planBot(words, skill, durationSec, rng = Math.random, { maxRate = 1 } = {}) {
   const all = [...words.entries()];
   const available = totalPoints(words.keys());
   // A little round-to-round variance so the bot isn't robotic.
@@ -178,10 +184,11 @@ export function planBot(words, skill, durationSec, rng = Math.random) {
   });
   keyed.sort((a, b) => b.key - a.key);
 
+  const maxWords = Math.max(3, Math.floor(maxRate * durationSec));
   const picks = [];
   let pts = 0;
   for (const { word } of keyed) {
-    if (pts >= target) break;
+    if (pts >= target || picks.length >= maxWords) break;
     picks.push(word);
     pts += scoreWord(word);
   }
@@ -195,7 +202,18 @@ export function planBot(words, skill, durationSec, rng = Math.random) {
     return { word, at: frac * durationSec };
   });
   plan.sort((a, b) => a.at - b.at);
-  return plan;
+
+  // No superhuman bursts: each find needs time to spot and trace. Finds that would
+  // spill past the end of the round are dropped.
+  const paced = [];
+  let prev = 1.5; // nobody finds a word the instant the board appears
+  for (const { word, at } of plan) {
+    const t = Math.max(at, prev + findGap(word, rng));
+    if (t > durationSec - 0.5) break;
+    paced.push({ word, at: t });
+    prev = t;
+  }
+  return paced;
 }
 
 // ---------- Adaptive difficulty ----------
@@ -206,6 +224,7 @@ export function planBot(words, skill, durationSec, rng = Math.random) {
 // Skill is stored for a 2-minute round and scaled to the actual round length.
 export const DEFAULT_PROFILE = {
   skill: { 4: 0.12, 5: 0.08 }, // estimated player fraction of available points in 120s
+  pace: { 4: 0.15, 5: 0.15 }, // player's own words per second (found without help)
   pressure: 1.0,
   games: 0,
   wins: 0,
@@ -243,6 +262,23 @@ export function updateProfile(profile, { sizeKey, durationSec = 120, playerPoint
   }
   p.best[sizeKey] = Math.max(p.best[sizeKey] || 0, playerPoints);
   p.history = [...p.history, { t: Date.now(), sizeKey, durationSec, playerPoints, available, result }].slice(-100);
+  return p;
+}
+
+// The Rival may find words a bit faster than you usually do, more so as it levels up,
+// but never faster than about one a second.
+export function rivalRate(profile, sizeKey, challenge = "even") {
+  const pace = profile.pace?.[sizeKey] ?? DEFAULT_PROFILE.pace[sizeKey];
+  const r = pace * 1.25 * profile.pressure * (CHALLENGE[challenge] ?? 1);
+  return Math.min(1, Math.max(0.08, r));
+}
+
+// Learn the player's pace from any round: words found without help per second.
+export function updatePace(profile, sizeKey, soloWords, durationSec) {
+  const p = structuredCloneSafe(profile);
+  p.pace = { ...DEFAULT_PROFILE.pace, ...p.pace };
+  const rate = durationSec > 0 ? soloWords / durationSec : 0;
+  p.pace[sizeKey] += 0.3 * (rate - p.pace[sizeKey]);
   return p;
 }
 

@@ -72,6 +72,19 @@ gradually over the round, as a person would.
 
     cd public && python3 -m http.server 8000
 
+## How the Rival stays human
+
+The Rival's points target comes from your skill (above), but its speed is capped by
+yours: the game tracks your own words-per-second (finds without help), and the Rival
+may find about 25% more words than you, scaled by its level and the Relaxed/Even/Tough
+setting, never more than one per second. Each find also takes time to spot and trace
+(0.6 s + 0.1 s per letter, ±15%), so it can't burst through a rich board.
+
+## Sound
+
+Uses Web Audio. iOS mutes web-app sound when the ring/silent switch is on silent.
+Switching Sound to On plays a chime so you can tell whether it's audible.
+
 ## Word lists and definitions
 
 - Definitions: Wiktionary (CC BY-SA), fetched live when you tap a word.

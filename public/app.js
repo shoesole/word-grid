@@ -1,6 +1,6 @@
 import {
   MODES, buildTrie, generateGame, isAdjacent, scoreWord, totalPoints,
-  planBot, botSkill, updateProfile, DEFAULT_PROFILE,
+  planBot, botSkill, updateProfile, DEFAULT_PROFILE, rivalRate, updatePace,
 } from "./engine.js";
 import {
   analyzeRound, updateSpotting, buildLessons, pickHintTarget, hintStep, hitRate,
@@ -11,7 +11,7 @@ import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
 // Bump together with VERSION in sw.js.
-const APP_VERSION = "7";
+const APP_VERSION = "8";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
@@ -38,16 +38,29 @@ let game = null;
 // ---------- Sound ----------
 
 let audio = null;
+// iOS only lets audio start inside a tap (touchend/click, not touchstart or a swipe),
+// and suspends it when the app is backgrounded. So every tap tries to create or
+// revive the context, and the first one plays a silent blip to unlock it.
+// Note: iOS mutes web-app sound when the ring/silent switch is set to silent.
+let master = null;
 function unlockAudio() {
   if (audio) {
-    // iOS suspends audio when the app is backgrounded; revive it on the next gesture.
     if (audio.state !== "running") audio.resume().catch(() => {});
     return;
   }
   try {
     audio = new (window.AudioContext || window.webkitAudioContext)();
+    master = audio.createGain();
+    master.gain.value = 1.8;
+    master.connect(audio.destination);
+    const blip = audio.createBufferSource();
+    blip.buffer = audio.createBuffer(1, 1, 22050);
+    blip.connect(audio.destination);
+    blip.start(0);
+    if (audio.state !== "running") audio.resume().catch(() => {});
   } catch {}
 }
+for (const type of ["touchend", "click"]) document.addEventListener(type, unlockAudio, { capture: true, passive: true });
 function beep(freq, dur = 0.06, type = "sine", vol = 0.08, delay = 0) {
   if (!audio || settings.sound !== "on") return;
   const t = audio.currentTime + delay;
@@ -57,7 +70,7 @@ function beep(freq, dur = 0.06, type = "sine", vol = 0.08, delay = 0) {
   osc.frequency.value = freq;
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  osc.connect(gain).connect(audio.destination);
+  osc.connect(gain).connect(master);
   osc.start(t);
   osc.stop(t + dur + 0.02);
 }
@@ -122,6 +135,7 @@ for (const seg of document.querySelectorAll(".seg")) {
     settings[seg.dataset.setting] = b.dataset.value;
     save("wg.settings", settings);
     unlockAudio();
+    if (seg.dataset.setting === "sound" && settings.sound === "on") sfx.good(); // so you can hear it's on
     renderHome();
   });
 }
@@ -160,7 +174,7 @@ function startGame(mode) {
   game = {
     mode, sizeKey, size, minLen, duration, board, words,
     found: [], foundSet: new Set(), score: 0,
-    plan: mode === "rival" ? planBot(words, skill, duration) : [],
+    plan: mode === "rival" ? planBot(words, skill, duration, Math.random, { maxRate: rivalRate(profile, sizeKey, settings.challenge) }) : [],
     botIdx: 0, botScore: 0,
     elapsed: 0, resumedAt: 0, running: false, over: false,
     path: [], tracing: false, flashTimer: 0,
@@ -629,6 +643,7 @@ function endGame() {
   const key = pctKey(sizeKey, duration);
   const newBestPct = soloPct > 0 && soloPct > (profile.bestPct?.[key] ?? 0);
   if (newBestPct) profile.bestPct = { ...profile.bestPct, [key]: soloPct };
+  profile = updatePace(profile, sizeKey, foundSet.size - assisted.size, duration);
   const byTag = analyzeRound(words, foundSet, assisted, trie);
   profile.spot = updateSpotting(profile.spot || {}, byTag);
   save("wg.profile", profile);

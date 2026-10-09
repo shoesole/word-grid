@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { buildTrie, solve, scoreWord, generateGame, planBot, makeRng, totalPoints,
-  DEFAULT_PROFILE, updateProfile, botSkill, isAdjacent } from "../public/engine.js";
+  DEFAULT_PROFILE, updateProfile, botSkill, isAdjacent, rivalRate, updatePace } from "../public/engine.js";
 
 const t0 = Date.now();
 const trie = buildTrie(readFileSync(new URL("../public/words.txt", import.meta.url), "utf8"));
@@ -54,4 +54,20 @@ assert.ok(botSkill(DEFAULT_PROFILE, 4, "even", 90) < botSkill(DEFAULT_PROFILE, 4
 const q90 = updateProfile(DEFAULT_PROFILE, { sizeKey: 4, durationSec: 90, playerPoints: 12, available: 100, result: null });
 const q180 = updateProfile(DEFAULT_PROFILE, { sizeKey: 4, durationSec: 180, playerPoints: 12, available: 100, result: null });
 assert.ok(q90.skill[4] > q180.skill[4]); // same points in less time = more skilled
+// Human pacing: word cap from maxRate, and realistic gaps between finds.
+const rich = generateGame(5, trie, makeRng(5));
+const paced = planBot(rich.words, 0.9, 120, makeRng(3), { maxRate: 0.3 });
+assert.ok(paced.length <= 36, `${paced.length} words`);
+const fast = planBot(rich.words, 0.9, 120, makeRng(3), { maxRate: 5 });
+assert.ok(fast[0].at >= 1.5);
+for (let k = 1; k < fast.length; k++) {
+  assert.ok(fast[k].at - fast[k - 1].at >= (0.6 + 0.1 * fast[k].word.length) * 0.85 - 1e-9, "gap too short");
+}
+assert.ok(fast.every((p) => p.at <= 119.5));
+// The Rival's pace follows the player's, within 0.08–1 words/sec.
+let pp = updatePace(DEFAULT_PROFILE, 4, 60, 120);
+assert.ok(pp.pace[4] > DEFAULT_PROFILE.pace[4]);
+assert.ok(rivalRate(pp, 4) > rivalRate(DEFAULT_PROFILE, 4));
+assert.equal(rivalRate({ ...DEFAULT_PROFILE, pace: { 4: 5 } }, 4), 1);
+assert.ok(rivalRate({ pace: {}, pressure: 1 }, 4) > 0); // old profiles without pace
 console.log("all tests passed");
