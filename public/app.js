@@ -11,7 +11,7 @@ import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
 // Bump together with VERSION in sw.js.
-const APP_VERSION = "6";
+const APP_VERSION = "7";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
@@ -31,7 +31,7 @@ function save(key, value) {
 }
 
 let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", sound: "on", starter: "15" });
-let profile = load("wg.profile", { ...DEFAULT_PROFILE, spot: {} });
+let profile = load("wg.profile", { ...DEFAULT_PROFILE, spot: {}, bestPct: {} });
 let trie = null;
 let game = null;
 
@@ -94,7 +94,8 @@ function renderHome() {
   $("stats").innerHTML = `
     <div class="stat"><b>${wins}–${losses}${ties ? `–${ties}` : ""}</b><span>vs Rival</span></div>
     <div class="stat"><b>${level}</b><span>Rival level</span></div>
-    <div class="stat"><b>${profile.best[settings.size] || 0}</b><span>Best ${settings.size}×${settings.size}</span></div>`;
+    <div class="stat"><b>${profile.best[settings.size] || 0}</b><span>Best score ${settings.size}×${settings.size}</span></div>
+    <div class="stat"><b>${formatPct(profile.bestPct?.[pctKey(settings.size, settings.duration)])}</b><span>Best % ${settings.size}×${settings.size} · ${clock(settings.duration)}</span></div>`;
   renderSpotting();
 }
 
@@ -237,6 +238,19 @@ function updateHud(t = 0) {
   $("you-count").textContent = plural(game.found.length, "word");
   $("rival-score").textContent = game.botScore;
   $("rival-count").textContent = plural(game.botIdx, "word");
+}
+
+function pctKey(size, duration) {
+  return `${size}-${duration}`;
+}
+
+function formatPct(p) {
+  return p ? `${p.toFixed(1)}%` : "—";
+}
+
+function clock(sec) {
+  sec = Number(sec);
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 }
 
 function plural(n, w) {
@@ -610,6 +624,11 @@ function endGame() {
   if (mode !== "train") {
     profile = updateProfile(profile, { sizeKey, durationSec: duration, playerPoints: score, available, result });
   }
+  // Best % completed, per board size and round length. Only words found without help count.
+  const soloPct = available ? (totalPoints([...foundSet].filter((w) => !assisted.has(w))) / available) * 100 : 0;
+  const key = pctKey(sizeKey, duration);
+  const newBestPct = soloPct > 0 && soloPct > (profile.bestPct?.[key] ?? 0);
+  if (newBestPct) profile.bestPct = { ...profile.bestPct, [key]: soloPct };
   const byTag = analyzeRound(words, foundSet, assisted, trie);
   profile.spot = updateSpotting(profile.spot || {}, byTag);
   save("wg.profile", profile);
@@ -618,12 +637,13 @@ function endGame() {
 
   const titles = { win: "You beat the Rival!", loss: "Rival takes this one", tie: "Dead heat!" };
   $("result-title").textContent = titles[result] ?? (mode === "train" ? "Training round" : "Time!");
-  const pct = available ? Math.round((totalPoints(foundSet) / available) * 100) : 0;
-  let sub = `${plural(game.found.length, "word")} of ${words.size} · ${pct}% of the board's points`;
+  const pct = available ? (totalPoints(foundSet) / available) * 100 : 0;
+  let sub = `${plural(game.found.length, "word")} of ${words.size} · ${pct.toFixed(1)}% of the board's points`;
   if (result) {
     const d = Math.round((after - before) * 100);
     sub += d > 0 ? " · Rival levels up" : d < 0 ? " · Rival eases off" : "";
   }
+  if (newBestPct) sub += ` · New best: ${formatPct(soloPct)} completed!`;
   $("result-sub").textContent = sub;
   $("result-scores").innerHTML = result
     ? `<div><b style="color:var(--accent)">${score}</b><span>You</span></div>

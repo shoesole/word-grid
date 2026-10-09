@@ -6,7 +6,9 @@ A Boggle-style word game for iPhone (installable web app), with no ads. Two mode
 - **Race the Rival**: race a bot that adapts to your level.
 - **Free Play**: just you and the clock.
 
-Every mode ends with 2–3 short lessons built from that board. Tap any word on the
+Every mode ends with 2–3 short lessons built from that board. The home screen tracks
+your best % completed (share of the board's points found without help) for each board
+size and round length, alongside your best score. Tap any word on the
 results screen to see its path on the board and its definition (from Wiktionary;
 inflections like "plural of bet" also show the base word's meaning).
 

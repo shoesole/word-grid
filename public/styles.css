@@ -79,7 +79,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .seg button.on { background: var(--surface); color: var(--text); }
 
 .stats {
-  margin-top: 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin-top: 24px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
 }
 .stat { background: var(--bg-2); border-radius: 12px; padding: 10px; text-align: center; }
 .stat b { display: block; font-size: 20px; }
