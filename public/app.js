@@ -779,7 +779,7 @@ $("play-free").addEventListener("click", () => startGame("free"));
 // Once on, it only counts time with the app open at night (10 pm – 5 am), per night:
 //   15 min: the photo and message (dismissable)
 //   30 min: a second message (dismissable)
-//   40 min: "Time for bed." and the app is locked until 5 am
+//   40 min: a bedtime message and the app is locked until 5 am
 // The night's count and the lock reset at 5 am. Tapping the bedtime message 5 times
 // disarms the egg and lifts the lock (an escape hatch in case the clock is wrong).
 
@@ -787,8 +787,8 @@ const NIGHT_START = 22; // 10 pm
 const MORNING = 5; // 5 am
 const EGG_STAGES = [
   { at: 15 * 60, img: true, msg: "Angie, you've been a naughty girl and you need to be punished." },
-  { at: 30 * 60, img: false, msg: "Seriously, you could be having sex right now." },
-  { at: 40 * 60, img: false, msg: "Time for bed.", lock: true },
+  { at: 30 * 60, img: false, msg: "Is this really better than the sex you could be having right now?" },
+  { at: 40 * 60, img: false, msg: "Sorry, you can't control yourself but it's time for bed", lock: true },
 ];
 const EGG_OFF = { on: false, night: "", seconds: 0, stage: 0 };
 let eggTaps = [];
