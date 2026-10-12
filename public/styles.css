@@ -74,6 +74,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .settings { display: grid; gap: 10px; }
 .settings-group { margin: 22px 0 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); }
 .setting-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.35; }
+.status { margin: 12px 0 0; text-align: center; font-size: 14px; color: var(--muted); }
+.status[hidden] { display: none; }
 .settings-link {
   margin-top: 16px; width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px;
   background: var(--bg-2); border-radius: 12px; padding: 12px 14px; font-size: 14px; text-align: left;

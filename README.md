@@ -73,7 +73,11 @@ round length, Mastery goal and long-word rule, Rival difficulty and Classic rule
 
 ## Run locally
 
-    cd public && python3 -m http.server 8000
+    python3 scripts/serve.py        # no-cache server for public/ on port 8000
+
+Then open http://localhost:8000, or http://<Mac's Wi-Fi IP>:8000 on a phone on the same
+Wi-Fi. (A plain `python3 -m http.server` lets Safari cache old files, which can stop the
+app from starting after an update.) Add `?eggtest` to try the Easter egg by day.
 
 **Classic rules** (Settings → Rival, off by default): as in real Boggle, words you and
 the Rival both find score for neither player. Scores are settled when time runs out;

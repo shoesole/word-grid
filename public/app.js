@@ -58,8 +58,9 @@ function renderHome() {
   }
   const level = Math.round(botSkill(profile, settings.size, settings.challenge, Number(settings.duration)) * 100);
   $("rival-sub").textContent = trie
-    ? `Adapts to you · rival level ${level}`
-    : "Loading dictionary…";
+    ? `A bot that adapts to your level · level ${level}`
+    : "A bot that adapts to your level";
+  $("status").hidden = !!trie;
   $("play-mastery").disabled = $("play-rival").disabled = $("play-free").disabled = !trie;
   const saved = loadMastery();
   $("mastery-sub").textContent = saved
@@ -1060,6 +1061,7 @@ $("setup-close").addEventListener("click", () => { $("egg-setup").hidden = true;
 
 // ---------- Boot ----------
 
+window.__wgStarted = true;
 $("version").textContent = `Version ${APP_VERSION}`;
 renderHome();
 fetch("words.txt")
@@ -1068,7 +1070,7 @@ fetch("words.txt")
     trie = buildTrie(text);
     renderHome();
   })
-  .catch(() => { $("rival-sub").textContent = "Couldn't load the dictionary. Reload to try again."; });
+  .catch(() => { $("status").textContent = "Couldn't load the dictionary. Close the app and open it again."; });
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   navigator.serviceWorker.register("sw.js").catch(() => {});

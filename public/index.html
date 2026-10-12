@@ -24,19 +24,20 @@
     </header>
 
     <div class="play-buttons">
-      <button id="play-mastery" class="btn primary big" disabled>
-        <span class="btn-title">Mastery</span>
-        <span class="btn-sub" id="mastery-sub">Untimed · find 80% of the common words · hints when you ask</span>
-      </button>
-      <button id="play-rival" class="btn secondary big" disabled>
+      <button id="play-rival" class="btn primary big" disabled>
         <span class="btn-title">Race the Rival</span>
-        <span class="btn-sub" id="rival-sub">Loading dictionary…</span>
+        <span class="btn-sub" id="rival-sub">A bot that adapts to your level</span>
       </button>
       <button id="play-free" class="btn secondary big" disabled>
         <span class="btn-title">Free Play</span>
         <span class="btn-sub">Just you and the clock</span>
       </button>
+      <button id="play-mastery" class="btn secondary big" disabled>
+        <span class="btn-title">Mastery</span>
+        <span class="btn-sub" id="mastery-sub">Untimed · find 80% of the common words · hints when you ask</span>
+      </button>
     </div>
+    <p class="status" id="status">Loading dictionary…</p>
 
     <button id="open-settings" class="settings-link">
       <span id="settings-summary"></span>
@@ -232,5 +233,15 @@
   <div class="toast" id="toast" hidden></div>
 
   <script type="module" src="app.js"></script>
+  <script>
+    // Safety net: if the game code never starts (e.g. a stale cached file), say so
+    // instead of leaving every button disabled.
+    setTimeout(function () {
+      if (window.__wgStarted) return;
+      var el = document.getElementById("status");
+      el.hidden = false;
+      el.textContent = "The game didn't start. Close the app completely and open it again.";
+    }, 8000);
+  </script>
 </body>
 </html>
