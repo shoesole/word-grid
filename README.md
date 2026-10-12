@@ -26,8 +26,8 @@ Each pattern's hit rate is compared with your own overall rate in the same round
 That relative score (your "spotting profile", shown on the home screen)
 decides what the lessons cover and which word a hint points you toward.
 
-**Starters (free):** after a dry spell (the "Starter after" setting: Off / 10 / 15 / 25 s,
-default 15), the Coach outlines the opening tiles of a few
+**Starters (free):** after a dry spell (the "Hints start after" setting: Off / 10 / 15 /
+25 s, default 15), the Coach outlines the opening tiles of a few
 unfound common words ("SH starts 3 words you haven't found"), choosing openings tied to
 your weak patterns. If you're still stuck 12 s later, it adds a third tile ("SHO…").
 Words found from a starter score normally but don't count toward your profile.
@@ -35,8 +35,8 @@ Tapping Hint while a starter is showing points at one of its words.
 
 **Family reminders (free):** when you find a word that has common relatives on the
 board (ZONE → ZONES, ZONAL) and don't come back to any of them within 25 s, the Coach
-steps in once you've also gone quiet (the "Starter after" delay, or 15 s if starters
-are off). It glows the tiles that extend your word and says how to get the rest:
+steps in once you've also gone quiet (the "Hints start after" delay, or 15 s if that's
+off). It glows the tiles that extend your word and says how to get the rest:
 "You found ZONE. 2 more words are related: add the glowing letter or look for a word
 inside it." When a relative needs the word traced through a different copy of a letter
 (PIES and PIETY need the other E), that tile gets a dashed outline and the message adds
@@ -56,6 +56,11 @@ The Relaxed / Even / Tough setting scales the result by 0.85 / 1.0 / 1.15.
 The coach prefers common, shorter words (it uses SCOWL commonness tiers) and finds them
 gradually over the round, as a person would.
 
+## Settings
+
+All settings live on their own screen (Settings › on the home screen): board size,
+round length, Coach "Hints start after", Rival difficulty and Classic rules.
+
 ## Layout
 
 - `public/`: the whole app (static files, no build step)
@@ -72,6 +77,10 @@ gradually over the round, as a person would.
 
     cd public && python3 -m http.server 8000
 
+**Classic rules** (Settings → Rival, off by default): as in real Boggle, words you and
+the Rival both find score for neither player. Scores are settled when time runs out;
+shared words show struck-through points on the results screen.
+
 ## How the Rival stays human
 
 The Rival's points target comes from your skill (above), but its speed is capped by
@@ -79,11 +88,6 @@ yours: the game tracks your own words-per-second (finds without help), and the R
 may find about 25% more words than you, scaled by its level and the Relaxed/Even/Tough
 setting, never more than one per second. Each find also takes time to spot and trace
 (0.6 s + 0.1 s per letter, ±15%), so it can't burst through a rich board.
-
-## Sound
-
-Uses Web Audio. iOS mutes web-app sound when the ring/silent switch is on silent.
-Switching Sound to On plays a chime so you can tell whether it's audible.
 
 ## Word lists and definitions
 

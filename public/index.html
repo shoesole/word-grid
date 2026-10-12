@@ -38,6 +38,25 @@
       </button>
     </div>
 
+    <button id="open-settings" class="settings-link">
+      <span id="settings-summary"></span>
+      <span class="settings-link-label">Settings ›</span>
+    </button>
+
+    <div class="stats" id="stats"></div>
+    <div class="spotting" id="spotting"></div>
+    <p class="fine">Tap “Share → Add to Home Screen” in Safari to install.<br><span id="version"></span></p>
+  </section>
+
+  <!-- Settings -->
+  <section id="settings" class="screen">
+    <div class="screen-head">
+      <button id="close-settings" class="icon-btn" aria-label="Back">‹</button>
+      <h2>Settings</h2>
+      <span class="icon-btn-spacer"></span>
+    </div>
+
+    <h3 class="settings-group">Game</h3>
     <div class="settings">
       <div class="setting">
         <span class="label">Board</span>
@@ -54,16 +73,12 @@
           <button data-value="180">3:00</button>
         </div>
       </div>
+    </div>
+
+    <h3 class="settings-group">Coach</h3>
+    <div class="settings">
       <div class="setting">
-        <span class="label">Rival</span>
-        <div class="seg" data-setting="challenge">
-          <button data-value="relaxed">Relaxed</button>
-          <button data-value="even">Even</button>
-          <button data-value="tough">Tough</button>
-        </div>
-      </div>
-      <div class="setting">
-        <span class="label">Starter after</span>
+        <span class="label">Hints start after</span>
         <div class="seg" data-setting="starter">
           <button data-value="off">Off</button>
           <button data-value="10">10s</button>
@@ -71,18 +86,28 @@
           <button data-value="25">25s</button>
         </div>
       </div>
-      <div class="setting">
-        <span class="label">Sound</span>
-        <div class="seg" data-setting="sound">
-          <button data-value="on">On</button>
-          <button data-value="off">Off</button>
-        </div>
-      </div>
+      <p class="setting-note">How long you can go without finding a word before the Coach highlights some starting letters. Paid hints are always available.</p>
     </div>
 
-    <div class="stats" id="stats"></div>
-    <div class="spotting" id="spotting"></div>
-    <p class="fine">Tap “Share → Add to Home Screen” in Safari to install.<br><span id="version"></span></p>
+    <h3 class="settings-group">Rival</h3>
+    <div class="settings">
+      <div class="setting">
+        <span class="label">Difficulty</span>
+        <div class="seg" data-setting="challenge">
+          <button data-value="relaxed">Relaxed</button>
+          <button data-value="even">Even</button>
+          <button data-value="tough">Tough</button>
+        </div>
+      </div>
+      <div class="setting">
+        <span class="label">Classic rules</span>
+        <div class="seg" data-setting="classic">
+          <button data-value="off">Off</button>
+          <button data-value="on">On</button>
+        </div>
+      </div>
+      <p class="setting-note">Like real Boggle: words you and the Rival both find score for neither of you. Scores are settled when time runs out.</p>
+    </div>
   </section>
 
   <!-- Game -->

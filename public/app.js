@@ -30,58 +30,11 @@ function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
-let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", sound: "on", starter: "15" });
+let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", starter: "15", classic: "off" });
 let profile = load("wg.profile", { ...DEFAULT_PROFILE, spot: {}, bestPct: {} });
 let trie = null;
 let game = null;
 
-// ---------- Sound ----------
-
-let audio = null;
-// iOS only lets audio start inside a tap (touchend/click, not touchstart or a swipe),
-// and suspends it when the app is backgrounded. So every tap tries to create or
-// revive the context, and the first one plays a silent blip to unlock it.
-// Note: iOS mutes web-app sound when the ring/silent switch is set to silent.
-let master = null;
-function unlockAudio() {
-  if (audio) {
-    if (audio.state !== "running") audio.resume().catch(() => {});
-    return;
-  }
-  try {
-    audio = new (window.AudioContext || window.webkitAudioContext)();
-    master = audio.createGain();
-    master.gain.value = 1.8;
-    master.connect(audio.destination);
-    const blip = audio.createBufferSource();
-    blip.buffer = audio.createBuffer(1, 1, 22050);
-    blip.connect(audio.destination);
-    blip.start(0);
-    if (audio.state !== "running") audio.resume().catch(() => {});
-  } catch {}
-}
-for (const type of ["touchend", "click"]) document.addEventListener(type, unlockAudio, { capture: true, passive: true });
-function beep(freq, dur = 0.06, type = "sine", vol = 0.08, delay = 0) {
-  if (!audio || settings.sound !== "on") return;
-  const t = audio.currentTime + delay;
-  const osc = audio.createOscillator();
-  const gain = audio.createGain();
-  osc.type = type;
-  osc.frequency.value = freq;
-  gain.gain.setValueAtTime(vol, t);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  osc.connect(gain).connect(master);
-  osc.start(t);
-  osc.stop(t + dur + 0.02);
-}
-const sfx = {
-  tile: (n) => beep(420 + n * 45, 0.05, "triangle", 0.05),
-  good: () => { beep(660, 0.08, "sine", 0.09); beep(990, 0.12, "sine", 0.09, 0.07); },
-  dup: () => beep(440, 0.1, "sine", 0.06),
-  bad: () => beep(150, 0.14, "square", 0.04),
-  rival: () => beep(330, 0.05, "sine", 0.025),
-  end: () => { beep(523, 0.12); beep(392, 0.12, "sine", 0.08, 0.12); beep(262, 0.25, "sine", 0.08, 0.24); },
-};
 
 // ---------- Screens ----------
 
@@ -92,7 +45,16 @@ function show(id) {
 
 // ---------- Home ----------
 
+const CHALLENGE_LABEL = { relaxed: "Relaxed", even: "Even", tough: "Tough" };
+
 function renderHome() {
+  const n = settings.size;
+  $("settings-summary").textContent = [
+    `${n}×${n}`,
+    clock(settings.duration),
+    `Rival: ${CHALLENGE_LABEL[settings.challenge]}${settings.classic === "on" ? ", classic" : ""}`,
+    settings.starter === "off" ? "Hints: off" : `Hints: ${settings.starter}s`,
+  ].join(" · ");
   for (const seg of document.querySelectorAll(".seg")) {
     const key = seg.dataset.setting;
     for (const b of seg.children) b.classList.toggle("on", b.dataset.value === settings[key]);
@@ -134,8 +96,6 @@ for (const seg of document.querySelectorAll(".seg")) {
     if (!b) return;
     settings[seg.dataset.setting] = b.dataset.value;
     save("wg.settings", settings);
-    unlockAudio();
-    if (seg.dataset.setting === "sound" && settings.sound === "on") sfx.good(); // so you can hear it's on
     renderHome();
   });
 }
@@ -164,7 +124,6 @@ function drawTrace(svg, line, path, size) {
 // ---------- Game ----------
 
 function startGame(mode) {
-  unlockAudio();
   const sizeKey = Number(settings.size);
   const { size, minLen } = MODES[sizeKey];
   const duration = Number(settings.duration);
@@ -176,6 +135,7 @@ function startGame(mode) {
     found: [], foundSet: new Set(), score: 0,
     plan: mode === "rival" ? planBot(words, skill, duration, Math.random, { maxRate: rivalRate(profile, sizeKey, settings.challenge) }) : [],
     botIdx: 0, botScore: 0,
+    classic: mode === "rival" && settings.classic === "on", // shared words cancel at the end
     elapsed: 0, resumedAt: 0, running: false, over: false,
     path: [], tracing: false, flashTimer: 0,
     hint: null, hintsUsed: 0, hintCost: 0, assisted: new Set(), lastFindAt: 0,
@@ -186,6 +146,7 @@ function startGame(mode) {
   renderTiles($("board"), board, size);
   $("found").innerHTML = "";
   $("scores").classList.toggle("solo", mode !== "rival");
+  $("rival-box").querySelector(".who").textContent = game.classic ? "Rival · classic" : "Rival";
   $("hint-row").hidden = mode !== "train";
   resetHintUi("Stuck? A hint costs a point or two.");
   updateHud();
@@ -205,10 +166,9 @@ function countdown(done) {
   ov.hidden = false;
   const step = () => {
     if (!game) return;
-    if (n === 0) { ov.hidden = true; beep(880, 0.15, "sine", 0.08); done(); return; }
+    if (n === 0) { ov.hidden = true; done(); return; }
     big.textContent = n;
     big.style.animation = "none"; void big.offsetWidth; big.style.animation = "";
-    beep(440, 0.08, "sine", 0.06);
     n--;
     setTimeout(step, 650);
   };
@@ -231,7 +191,6 @@ function tick() {
     bumped = true;
   }
   if (bumped) {
-    sfx.rival();
     const box = $("rival-box");
     box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump");
   }
@@ -360,7 +319,6 @@ function familyNudge(t) {
   clearStarter();
   game.family = { root: due.root, words: relatives, shownAt: t, progressAt: t };
   showFamilyMessage();
-  beep(600, 0.1, "sine", 0.05);
   return true;
 }
 
@@ -415,7 +373,6 @@ function setStarter(starter, t) {
     el.classList.toggle("starter-first", i === starter.tiles[0]);
   }
   showStarterMessage();
-  beep(600, 0.1, "sine", 0.05);
 }
 
 function clearStarter() {
@@ -449,7 +406,6 @@ function showHintTiles({ pulse, glow, guide }) {
 
 $("hint-btn").addEventListener("click", () => {
   if (!game?.running || game.mode !== "train") return;
-  unlockAudio();
   if (!game.hint) {
     // While a family reminder or starter is showing, hints point at one of its words.
     const only = game.family ? new Set(game.family.words) : game.starter ? new Set(game.starter.words) : null;
@@ -471,7 +427,6 @@ $("hint-btn").addEventListener("click", () => {
   const next = HINT_COSTS[h.level + 1];
   $("hint-cost").textContent = next ? `−${next}` : "";
   $("hint-btn").disabled = !next;
-  beep(740, 0.08, "sine", 0.06);
   updateHud(elapsed());
 });
 
@@ -501,7 +456,6 @@ function visit(i) {
     path.pop(); // slide back to undo
   } else if (!path.includes(i) && (path.length === 0 || isAdjacent(game.size, path[path.length - 1], i))) {
     path.push(i);
-    sfx.tile(path.length);
   } else {
     return;
   }
@@ -547,7 +501,6 @@ function handleMove(e) {
 boardEl.addEventListener("pointerdown", (e) => {
   if (!game?.running) return;
   e.preventDefault();
-  unlockAudio();
   clearTimeout(game.flashTimer);
   boardEl.setPointerCapture(e.pointerId);
   game.tracing = true;
@@ -576,9 +529,9 @@ function finishTrace() {
 
   let state, pts = "";
   if (word.length < game.minLen) {
-    state = "bad"; pts = "too short"; sfx.bad();
+    state = "bad"; pts = "too short";
   } else if (game.foundSet.has(word)) {
-    state = "dup"; pts = "already found"; sfx.dup();
+    state = "dup"; pts = "already found";
   } else if (game.words.has(word)) {
     state = "good";
     const p = scoreWord(word);
@@ -606,9 +559,8 @@ function finishTrace() {
     }
     addChip(word);
     updateHud(elapsed());
-    sfx.good();
   } else {
-    state = "bad"; pts = "not a word"; sfx.bad();
+    state = "bad"; pts = "not a word";
   }
   renderPath(state);
   setCurrent(word, pts, state);
@@ -628,11 +580,17 @@ function endGame() {
   game.running = false;
   game.over = true;
   cancelTrace();
-  sfx.end();
 
   const { mode, sizeKey, duration, score, botScore, words, foundSet, assisted } = game;
   const available = totalPoints(words.keys());
-  const result = mode === "rival" ? (score > botScore ? "win" : score < botScore ? "loss" : "tie") : null;
+  // Only words the Rival actually reached before time ran out.
+  game.botWords = new Set(game.plan.slice(0, game.botIdx).map((p) => p.word));
+  // Classic Boggle: words both players found score for neither.
+  const shared = game.classic ? [...foundSet].filter((w) => game.botWords.has(w)) : [];
+  const sharedPts = totalPoints(shared);
+  const youFinal = score - sharedPts;
+  const rivalFinal = botScore - sharedPts;
+  const result = mode === "rival" ? (youFinal > rivalFinal ? "win" : youFinal < rivalFinal ? "loss" : "tie") : null;
   const before = botSkill(profile, sizeKey, settings.challenge, duration);
   // Hinted rounds would skew the Rival's read on your level, so only unassisted modes feed it.
   if (mode !== "train") {
@@ -658,11 +616,16 @@ function endGame() {
     const d = Math.round((after - before) * 100);
     sub += d > 0 ? " · Rival levels up" : d < 0 ? " · Rival eases off" : "";
   }
+  if (game.classic) {
+    sub += shared.length
+      ? ` · Classic rules: ${plural(shared.length, "shared word")} cancelled (−${sharedPts} each)`
+      : " · Classic rules: no shared words";
+  }
   if (newBestPct) sub += ` · New best: ${formatPct(soloPct)} completed!`;
   $("result-sub").textContent = sub;
   $("result-scores").innerHTML = result
-    ? `<div><b style="color:var(--accent)">${score}</b><span>You</span></div>
-       <div><b style="color:var(--rival)">${botScore}</b><span>Rival</span></div>`
+    ? `<div><b style="color:var(--accent)">${youFinal}</b><span>You</span></div>
+       <div><b style="color:var(--rival)">${rivalFinal}</b><span>Rival</span></div>`
     : mode === "train"
     ? `<div><b style="color:var(--accent)">${score}</b><span>Points</span></div>
        <div><b>${foundSet.size - assisted.size}</b><span>Found solo</span></div>
@@ -670,7 +633,6 @@ function endGame() {
     : `<div><b style="color:var(--accent)">${score}</b><span>Points</span></div>
        <div><b>${available}</b><span>Available</span></div>`;
 
-  game.botWords = new Set(game.plan.map((p) => p.word));
   $("tab-rival").hidden = mode !== "rival";
   renderTiles($("mini-board"), game.board, game.size);
   ensureMiniTrace();
@@ -767,11 +729,11 @@ function selectTab(tab) {
   let list, legend = "";
   if (tab === "yours") {
     list = [...foundSet];
-    if (game.mode === "rival") legend = "• = the Rival found it too";
+    if (game.mode === "rival") legend = game.classic ? "• = the Rival found it too (cancelled, scores 0)" : "• = the Rival found it too";
     if (game.mode === "train" && game.assisted.size) legend = "• = found with help (hint or starter)";
   } else if (tab === "rival") {
     list = [...botWords];
-    legend = "• = you found it too";
+    legend = game.classic ? "• = you found it too (cancelled, scores 0)" : "• = you found it too";
   } else {
     list = [...words.keys()].filter((w) => !foundSet.has(w));
     legend = "Faded words are obscure. The Coach never counts them, so don't sweat those.";
@@ -783,7 +745,8 @@ function selectTab(tab) {
     : tab === "yours" && game.mode === "train" ? game.assisted
     : new Set();
   const rows = list.map((w) => {
-    const cls = ["word-row", other.has(w) ? "both" : "", words.get(w).tier > 1 ? "rare" : ""].join(" ");
+    const cancelled = game.classic && tab !== "missed" && foundSet.has(w) && botWords.has(w);
+    const cls = ["word-row", other.has(w) ? "both" : "", words.get(w).tier > 1 ? "rare" : "", cancelled ? "cancelled" : ""].join(" ");
     return `<button class="${cls}" data-w="${w}"><span class="w">${w}</span><span class="pts">${scoreWord(w)}</span></button>`;
   });
   $("word-list").innerHTML =
@@ -805,6 +768,8 @@ $("word-list").addEventListener("click", (e) => {
 });
 $("again").addEventListener("click", () => startGame(game.mode));
 $("home-btn").addEventListener("click", () => { renderHome(); show("home"); });
+$("open-settings").addEventListener("click", () => show("settings"));
+$("close-settings").addEventListener("click", () => { renderHome(); show("home"); });
 $("play-train").addEventListener("click", () => startGame("train"));
 $("play-rival").addEventListener("click", () => startGame("rival"));
 $("play-free").addEventListener("click", () => startGame("free"));
