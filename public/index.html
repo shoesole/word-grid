@@ -194,7 +194,7 @@
       <button id="egg-close" class="btn primary">Dismiss</button>
     </div>
   </div>
-  <!-- Hidden Easter egg setup: 5 taps on the version text, only when armed. -->
+  <!-- Hidden Easter egg setup: 5 quick taps on the home logo. -->
   <div class="overlay egg" id="egg-setup" hidden>
     <div class="overlay-card egg-card setup-card">
       <h2>Surprise pictures</h2>
@@ -224,6 +224,7 @@
         </div>
       </div>
       <button id="setup-close" class="btn primary">Done</button>
+      <button id="setup-off" class="btn secondary">Turn surprise off</button>
     </div>
   </div>
   <div class="egg-test" id="egg-test" hidden>
@@ -234,12 +235,27 @@
 
   <script type="module" src="app.js"></script>
   <script>
-    // Safety net: if the game code never starts (e.g. a stale cached file), say so
-    // instead of leaving every button disabled, with the error to help track it down.
+    // Safety net. Right after an update the browser can pair the new page with an old
+    // cached copy of the game code, which stops it from starting; a reload fixes that.
+    // So: reload once automatically, and only if that doesn't help, say so (with the
+    // error, to help track it down) instead of leaving every button disabled.
     var bootError = "";
-    window.addEventListener("error", function (e) { if (!bootError) bootError = e.message || String(e.error || ""); });
-    setTimeout(function () {
+    function retryOnce() {
+      try {
+        var last = Number(sessionStorage.getItem("wg.bootRetry")) || 0;
+        if (Date.now() - last < 30000) return false;
+        sessionStorage.setItem("wg.bootRetry", String(Date.now()));
+        location.reload();
+        return true;
+      } catch (e) { return false; }
+    }
+    window.addEventListener("error", function (e) {
       if (window.__wgStarted) return;
+      if (!bootError) bootError = e.message || String(e.error || "");
+      retryOnce();
+    });
+    setTimeout(function () {
+      if (window.__wgStarted || retryOnce()) return;
       var el = document.getElementById("status");
       el.hidden = false;
       el.textContent = "The game didn't start. Close the app completely and open it again." +

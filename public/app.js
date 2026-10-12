@@ -8,7 +8,7 @@ import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
 // Bump together with VERSION in sw.js.
-const APP_VERSION = "9";
+const APP_VERSION = "10";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
@@ -864,7 +864,8 @@ $("play-rival").addEventListener("click", () => startGame("rival"));
 $("play-free").addEventListener("click", () => startGame("free"));
 
 // ---------- Easter egg ----------
-// Off by default. Tapping the home logo 5 times toggles it for this device.
+// Off by default. Tapping the home logo 5 times arms it on this device and opens its
+// picture screen (which can also turn it off).
 // Once on, it only counts time with the app open at night (10 pm – 5 am), per night:
 //   15 min: the photo and message (dismissable)
 //   30 min: a second message (dismissable)
@@ -889,7 +890,7 @@ const EGG_KEY = EGG_TEST ? "wg.egg.test" : "wg.egg";
 const EGG_DEFAULT = EGG_TEST ? { ...EGG_OFF, on: true } : EGG_OFF;
 const TICK_MS = EGG_TEST ? 1000 : 5000;
 const TICK_COUNTS = EGG_TEST ? 60 : 5; // seconds of "night" each tick adds
-let eggTaps = [];
+const tapLog = {}; // separate counters, so taps in one place never count toward another
 
 // The evening a moment belongs to (10 pm – 5 am counts as one night), or null by day.
 function nightOf(d) {
@@ -904,23 +905,32 @@ function nightOf(d) {
   return null;
 }
 
-function fiveTaps() {
+function fiveTaps(where) {
   const now = Date.now();
-  eggTaps = [...eggTaps.filter((t) => now - t < 3000), now];
-  if (eggTaps.length < 5) return false;
-  eggTaps = [];
-  return true;
+  const taps = [...(tapLog[where] ?? []).filter((t) => now - t < 3000), now];
+  tapLog[where] = taps.length >= 5 ? [] : taps;
+  return taps.length >= 5;
 }
 
+// 5 quick taps on the logo: arms the surprise (if it isn't already) and opens its
+// picture screen, which also has the button to turn it off.
 document.querySelector(".logo").addEventListener("click", () => {
-  if (!fiveTaps()) return;
-  const on = !load(EGG_KEY, EGG_DEFAULT).on;
-  save(EGG_KEY, { ...EGG_OFF, on });
-  toast(on ? "Surprise armed" : "Surprise off");
+  if (!fiveTaps("logo")) return;
+  if (!load(EGG_KEY, EGG_DEFAULT).on) {
+    save(EGG_KEY, { ...EGG_OFF, on: true });
+    toast("Surprise armed");
+  }
+  openEggSetup();
+});
+
+$("setup-off").addEventListener("click", () => {
+  save(EGG_KEY, EGG_OFF); // pictures stay saved for next time
+  $("egg-setup").hidden = true;
+  toast("Surprise off");
 });
 
 $("egg-msg").addEventListener("click", () => {
-  if (!$("egg").classList.contains("locked") || !fiveTaps()) return;
+  if (!$("egg").classList.contains("locked") || !fiveTaps("bedtime")) return;
   save(EGG_KEY, EGG_OFF);
   $("egg").hidden = true;
   $("egg").classList.remove("locked");
@@ -1022,12 +1032,6 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) eggT
 eggTick(false);
 
 $("egg-close").addEventListener("click", () => { $("egg").hidden = true; resumeMasteryIfClear(); });
-
-// Hidden setup: 5 quick taps on the version text, only on an armed phone.
-$("version").addEventListener("click", () => {
-  if (!fiveTaps() || !load(EGG_KEY, EGG_DEFAULT).on) return;
-  openEggSetup();
-});
 
 async function openEggSetup() {
   for (const slot of document.querySelectorAll(".pic-slot")) {

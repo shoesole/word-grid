@@ -286,7 +286,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .egg-card .pic-preview { max-height: 110px; min-width: 0; margin: 8px 0; }
 .pic-actions { display: flex; gap: 8px; margin-top: 6px; }
 .pic-actions .btn { flex: 1; padding: 8px; font-size: 15px; }
-#setup-close { width: 100%; margin-top: 8px; }
+#setup-close, #setup-off { width: 100%; margin-top: 8px; }
 .file-btn { position: relative; cursor: pointer; text-align: center; }
 .file-btn input { position: absolute; inset: 0; opacity: 0; width: 100%; }
 .egg-card p { margin: 0 0 18px; font-size: 18px; font-weight: 600; line-height: 1.35; }
