@@ -2,7 +2,7 @@
 
 A Boggle-style word game for iPhone (installable web app), with no ads. Two modes:
 
-- **Mastery**: an untimed board. Find a share of the common words (80% by default), with
+- **Mastery Mode**: an untimed board. Find a share of the common words (80% by default), with
   hints only when you ask.
 - **Race the Rival**: race a bot that adapts to your level.
 - **Free Play**: just you and the clock.
@@ -13,9 +13,9 @@ size and round length, alongside your best score. Tap any word on the
 results screen to see its path on the board and its definition (from Wiktionary;
 inflections like "plural of bet" also show the base word's meaning).
 
-## Mastery (`mastery.js`)
+## Mastery Mode (`mastery.js`)
 
-No timer. The goal is a share of the board's **common** words (Settings → Mastery → Goal:
+No timer. The goal is a share of the board's **common** words (Settings → Mastery Mode → Goal:
 60/70/80/90%, default 80). With **Long word** on (default), the goal also needs at least
 one 6+ letter word. Obscure words are accepted and shown as a bonus but never required.
 

@@ -33,7 +33,7 @@
         <span class="btn-sub">Just you and the clock</span>
       </button>
       <button id="play-mastery" class="btn secondary big" disabled>
-        <span class="btn-title">Mastery</span>
+        <span class="btn-title">Mastery Mode</span>
         <span class="btn-sub" id="mastery-sub">Untimed · find 80% of the common words · hints when you ask</span>
       </button>
     </div>
@@ -76,7 +76,7 @@
       </div>
     </div>
 
-    <h3 class="settings-group">Mastery</h3>
+    <h3 class="settings-group">Mastery Mode</h3>
     <div class="settings">
       <div class="setting">
         <span class="label">Goal</span>
@@ -235,12 +235,15 @@
   <script type="module" src="app.js"></script>
   <script>
     // Safety net: if the game code never starts (e.g. a stale cached file), say so
-    // instead of leaving every button disabled.
+    // instead of leaving every button disabled, with the error to help track it down.
+    var bootError = "";
+    window.addEventListener("error", function (e) { if (!bootError) bootError = e.message || String(e.error || ""); });
     setTimeout(function () {
       if (window.__wgStarted) return;
       var el = document.getElementById("status");
       el.hidden = false;
-      el.textContent = "The game didn't start. Close the app completely and open it again.";
+      el.textContent = "The game didn't start. Close the app completely and open it again." +
+        (bootError ? " (Details: " + bootError + ")" : "");
     }, 8000);
   </script>
 </body>

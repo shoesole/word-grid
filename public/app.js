@@ -50,7 +50,7 @@ function renderHome() {
     `${n}×${n}`,
     clock(settings.duration),
     `Rival: ${CHALLENGE_LABEL[settings.challenge]}${settings.classic === "on" ? ", classic" : ""}`,
-    `Mastery: ${settings.goal}%${settings.longword === "on" ? " + long word" : ""}`,
+    `Mastery Mode: ${settings.goal}%${settings.longword === "on" ? " + long word" : ""}`,
   ].join(" · ");
   for (const seg of document.querySelectorAll(".seg")) {
     const key = seg.dataset.setting;
