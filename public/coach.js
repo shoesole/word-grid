@@ -206,7 +206,7 @@ export function buildLessons(words, foundSet, byTag, spot) {
 
 function tipFor(tag) {
   if (["ing", "ed", "er", "est", "ly"].includes(tag)) return `Find the ${TAGS[tag]} tiles first, then work backwards from them.`;
-  if (tag === "s") return "Every S next to a word you found is a free point.";
+  if (tag === "s") return "Every S next to a word you found is another word.";
   if (TAGS[tag].endsWith("-")) return `Start at the ${TAGS[tag].slice(0, -1)} and look for a word after it.`;
   if (tag === "long") return "Long words usually hide a short word plus an ending. Build outward from it.";
   if (tag === "vowel") return "Try starting a word on each vowel, not just the consonants.";

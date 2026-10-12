@@ -165,7 +165,7 @@ function setupGameScreen() {
   const mastery = game.mode === "mastery";
   renderTiles($("board"), game.board, game.size);
   $("found").innerHTML = "";
-  for (const w of game.found) addChip(w, false);
+  for (const w of game.found) addChip(w, false, game.assisted.has(w));
   $("game").classList.toggle("mastery", mastery);
   $("scores").hidden = mastery;
   $("mastery-panel").hidden = !mastery;
@@ -924,6 +924,7 @@ $("egg-msg").addEventListener("click", () => {
   $("egg").hidden = true;
   $("egg").classList.remove("locked");
   toast("Surprise off");
+  resumeMasteryIfClear();
 });
 
 function toast(msg) {
@@ -985,6 +986,7 @@ function eggTick(countTime) {
     if ($("egg").classList.contains("locked")) {
       $("egg").hidden = true;
       $("egg").classList.remove("locked");
+      resumeMasteryIfClear();
     }
   }
   if (night) {
@@ -1012,6 +1014,7 @@ if (EGG_TEST) {
     $("egg").hidden = true;
     $("egg").classList.remove("locked");
     eggTick(false);
+    resumeMasteryIfClear();
   });
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) eggTick(false); });
