@@ -24,9 +24,9 @@
     </header>
 
     <div class="play-buttons">
-      <button id="play-train" class="btn primary big" disabled>
-        <span class="btn-title">Train with the Coach</span>
-        <span class="btn-sub">Hints when you're stuck · lessons after each round</span>
+      <button id="play-mastery" class="btn primary big" disabled>
+        <span class="btn-title">Mastery</span>
+        <span class="btn-sub" id="mastery-sub">Untimed · find 80% of the common words · hints when you ask</span>
       </button>
       <button id="play-rival" class="btn secondary big" disabled>
         <span class="btn-title">Race the Rival</span>
@@ -75,18 +75,25 @@
       </div>
     </div>
 
-    <h3 class="settings-group">Coach</h3>
+    <h3 class="settings-group">Mastery</h3>
     <div class="settings">
       <div class="setting">
-        <span class="label">Hints start after</span>
-        <div class="seg" data-setting="starter">
-          <button data-value="off">Off</button>
-          <button data-value="10">10s</button>
-          <button data-value="15">15s</button>
-          <button data-value="25">25s</button>
+        <span class="label">Goal</span>
+        <div class="seg" data-setting="goal">
+          <button data-value="60">60%</button>
+          <button data-value="70">70%</button>
+          <button data-value="80">80%</button>
+          <button data-value="90">90%</button>
         </div>
       </div>
-      <p class="setting-note">How long you can go without finding a word before the Coach highlights some starting letters. Paid hints are always available.</p>
+      <div class="setting">
+        <span class="label">Long word</span>
+        <div class="seg" data-setting="longword">
+          <button data-value="off">Off</button>
+          <button data-value="on">On</button>
+        </div>
+      </div>
+      <p class="setting-note">The share of a board's common words to find. Obscure words never count against you. With Long word on, the goal also needs at least one word of 6+ letters. Changes apply to your next board.</p>
     </div>
 
     <h3 class="settings-group">Rival</h3>
@@ -121,9 +128,14 @@
       <div class="score you"><span class="who">You</span><span id="you-score">0</span><span class="count" id="you-count">0 words</span></div>
       <div class="score rival" id="rival-box"><span class="who">Rival</span><span id="rival-score">0</span><span class="count" id="rival-count">0 words</span></div>
     </div>
-    <div class="hint-row" id="hint-row">
-      <button id="hint-btn" class="hint-btn">Hint <span id="hint-cost">−1</span></button>
-      <span class="hint-msg" id="hint-msg">Stuck? A hint costs a point or two.</span>
+    <div class="mastery-panel" id="mastery-panel" hidden>
+      <div class="m-bar" id="m-bar"><i id="m-fill"></i><span class="m-goal" id="m-goal"></span></div>
+      <div class="m-row"><span id="m-text"></span><span id="m-extra"></span></div>
+      <div class="m-ladder" id="m-ladder"></div>
+    </div>
+    <div class="hint-row" id="hint-row" hidden>
+      <button id="hint-btn" class="hint-btn">Hint</button>
+      <span class="hint-msg" id="hint-msg"></span>
     </div>
     <div class="current" id="current"><span id="current-word"></span><span id="current-pts"></span></div>
     <div class="board-wrap">
@@ -135,6 +147,16 @@
       <div class="overlay-card">
         <h2>Paused</h2>
         <button id="resume" class="btn primary">Resume</button>
+      </div>
+    </div>
+    <div class="overlay" id="goal" hidden>
+      <div class="overlay-card">
+        <h2>Goal reached!</h2>
+        <p class="goal-text" id="goal-text"></p>
+        <div class="goal-actions">
+          <button id="goal-keep" class="btn secondary">Keep going</button>
+          <button id="goal-finish" class="btn primary">Finish</button>
+        </div>
       </div>
     </div>
     <div class="overlay" id="countdown" hidden><div class="count-big" id="count-big">3</div></div>

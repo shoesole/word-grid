@@ -1,12 +1,9 @@
 import {
-  MODES, buildTrie, generateGame, isAdjacent, scoreWord, totalPoints,
+  MODES, buildTrie, generateGame, isAdjacent, scoreWord, totalPoints, solve,
   planBot, botSkill, updateProfile, DEFAULT_PROFILE, rivalRate, updatePace,
 } from "./engine.js";
-import {
-  analyzeRound, updateSpotting, buildLessons, pickHintTarget, hintStep, hitRate,
-  weakestPatterns, HINT_COSTS, pickStarter, starterMessage,
-  relation, unfoundRelatives, familyHint,
-} from "./coach.js";
+import { analyzeRound, updateSpotting, buildLessons, hitRate, weakestPatterns } from "./coach.js";
+import { generateMasteryBoard, masteryStats, shouldPreferLong, pickMasteryTarget, masteryHint, HINT_STEPS } from "./mastery.js";
 import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
@@ -30,8 +27,8 @@ function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
-let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", starter: "15", classic: "off" });
-let profile = load("wg.profile", { ...DEFAULT_PROFILE, spot: {}, bestPct: {} });
+let settings = load("wg.settings", { size: "4", duration: "120", challenge: "even", classic: "off", goal: "80", longword: "on" });
+let profile = load("wg.profile", { ...DEFAULT_PROFILE, spot: {}, bestPct: {}, spotMastery: {}, mastery: [] });
 let trie = null;
 let game = null;
 
@@ -53,7 +50,7 @@ function renderHome() {
     `${n}×${n}`,
     clock(settings.duration),
     `Rival: ${CHALLENGE_LABEL[settings.challenge]}${settings.classic === "on" ? ", classic" : ""}`,
-    settings.starter === "off" ? "Hints: off" : `Hints: ${settings.starter}s`,
+    `Mastery: ${settings.goal}%${settings.longword === "on" ? " + long word" : ""}`,
   ].join(" · ");
   for (const seg of document.querySelectorAll(".seg")) {
     const key = seg.dataset.setting;
@@ -63,18 +60,27 @@ function renderHome() {
   $("rival-sub").textContent = trie
     ? `Adapts to you · rival level ${level}`
     : "Loading dictionary…";
-  $("play-train").disabled = $("play-rival").disabled = $("play-free").disabled = !trie;
+  $("play-mastery").disabled = $("play-rival").disabled = $("play-free").disabled = !trie;
+  const saved = loadMastery();
+  $("mastery-sub").textContent = saved
+    ? `Resume your board · ${saved.found.length} words found so far`
+    : `Untimed · find ${settings.goal}% of the common words · hints when you ask`;
+  const boards = profile.mastery ?? [];
+  const recent = boards.slice(-5);
+  const avgHints = recent.length ? (recent.reduce((a, b) => a + b.hints, 0) / recent.length).toFixed(1) : "—";
 
   const { wins, losses, ties } = profile;
   $("stats").innerHTML = `
     <div class="stat"><b>${wins}–${losses}${ties ? `–${ties}` : ""}</b><span>vs Rival</span></div>
     <div class="stat"><b>${level}</b><span>Rival level</span></div>
     <div class="stat"><b>${profile.best[settings.size] || 0}</b><span>Best score ${settings.size}×${settings.size}</span></div>
-    <div class="stat"><b>${formatPct(profile.bestPct?.[pctKey(settings.size, settings.duration)])}</b><span>Best % ${settings.size}×${settings.size} · ${clock(settings.duration)}</span></div>`;
+    <div class="stat"><b>${formatPct(profile.bestPct?.[pctKey(settings.size, settings.duration)])}</b><span>Best % ${settings.size}×${settings.size} · ${clock(settings.duration)}</span></div>
+    <div class="stat"><b>${boards.filter((b) => b.goalMet).length}</b><span>Boards mastered</span></div>
+    <div class="stat"><b>${avgHints}</b><span>Avg hints, ${recent.length === 1 ? "last board" : `last ${recent.length || 5} boards`}</span></div>`;
   renderSpotting();
 }
 
-// The player's weakest patterns, from every mode's rounds.
+// The player's weakest patterns, from timed rounds (Mastery keeps its own).
 function renderSpotting() {
   const weak = weakestPatterns(profile.spot);
   if (!weak.length) { $("spotting").innerHTML = ""; return; }
@@ -123,40 +129,55 @@ function drawTrace(svg, line, path, size) {
 
 // ---------- Game ----------
 
-function startGame(mode) {
-  const sizeKey = Number(settings.size);
+function newGameState(mode, sizeKey, board, words, extra = {}) {
   const { size, minLen } = MODES[sizeKey];
+  return {
+    mode, sizeKey, size, minLen, board, words, duration: 0,
+    found: [], foundSet: new Set(), score: 0,
+    plan: [], botIdx: 0, botScore: 0, classic: false,
+    elapsed: 0, resumedAt: 0, running: false, over: false,
+    path: [], tracing: false, flashTimer: 0,
+    hint: null, hintsUsed: 0, assisted: new Set(),
+    ...extra,
+  };
+}
+
+function startGame(mode) {
+  if (mode === "mastery") return startMastery();
+  const sizeKey = Number(settings.size);
   const duration = Number(settings.duration);
   const { board, words } = generateGame(sizeKey, trie);
   const skill = mode === "rival" ? botSkill(profile, sizeKey, settings.challenge, duration) : 0;
-
-  game = {
-    mode, sizeKey, size, minLen, duration, board, words,
-    found: [], foundSet: new Set(), score: 0,
+  game = newGameState(mode, sizeKey, board, words, {
+    duration,
     plan: mode === "rival" ? planBot(words, skill, duration, Math.random, { maxRate: rivalRate(profile, sizeKey, settings.challenge) }) : [],
-    botIdx: 0, botScore: 0,
     classic: mode === "rival" && settings.classic === "on", // shared words cancel at the end
-    elapsed: 0, resumedAt: 0, running: false, over: false,
-    path: [], tracing: false, flashTimer: 0,
-    hint: null, hintsUsed: 0, hintCost: 0, assisted: new Set(), lastFindAt: 0,
-    starter: null, starterAt: 0,
-    families: [], family: null,
-  };
-
-  renderTiles($("board"), board, size);
-  $("found").innerHTML = "";
-  $("scores").classList.toggle("solo", mode !== "rival");
-  $("rival-box").querySelector(".who").textContent = game.classic ? "Rival · classic" : "Rival";
-  $("hint-row").hidden = mode !== "train";
-  resetHintUi("Stuck? A hint costs a point or two.");
-  updateHud();
-  setCurrent("", "");
-  show("game");
+  });
+  setupGameScreen();
   countdown(() => {
     game.running = true;
     game.resumedAt = performance.now();
     requestAnimationFrame(tick);
   });
+}
+
+function setupGameScreen() {
+  const mastery = game.mode === "mastery";
+  renderTiles($("board"), game.board, game.size);
+  $("found").innerHTML = "";
+  for (const w of game.found) addChip(w, false);
+  $("game").classList.toggle("mastery", mastery);
+  $("scores").hidden = mastery;
+  $("mastery-panel").hidden = !mastery;
+  $("hint-row").hidden = !mastery;
+  $("pause").textContent = mastery ? "Done" : "❚❚";
+  $("pause").classList.toggle("text-btn", mastery);
+  $("scores").classList.toggle("solo", game.mode !== "rival");
+  $("rival-box").querySelector(".who").textContent = game.classic ? "Rival · classic" : "Rival";
+  if (mastery) restoreHintUi();
+  updateHud();
+  setCurrent("", "");
+  show("game");
 }
 
 function countdown(done) {
@@ -179,9 +200,17 @@ function elapsed() {
   return game.elapsed + (game.running ? (performance.now() - game.resumedAt) / 1000 : 0);
 }
 
+let lastSave = 0;
 function tick() {
   if (!game || !game.running) return;
   const t = elapsed();
+
+  if (game.mode === "mastery") {
+    // Untimed: no end, just keep the elapsed time saved now and then.
+    if (performance.now() - lastSave > 10000) saveMastery();
+    requestAnimationFrame(tick);
+    return;
+  }
 
   // Rival finds words on its schedule.
   let bumped = false;
@@ -195,14 +224,13 @@ function tick() {
     box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump");
   }
 
-  if (game.mode === "train") nudge(t);
-
   updateHud(t);
   if (t >= game.duration) return endGame();
   requestAnimationFrame(tick);
 }
 
 function updateHud(t = 0) {
+  if (game.mode === "mastery") return updateMasteryHud();
   const left = Math.max(0, Math.ceil(game.duration - t));
   const timer = $("timer");
   timer.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
@@ -222,7 +250,7 @@ function formatPct(p) {
 }
 
 function clock(sec) {
-  sec = Number(sec);
+  sec = Math.floor(Number(sec));
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 }
 
@@ -230,11 +258,14 @@ function plural(n, w) {
   return `${n} ${w}${n === 1 ? "" : "s"}`;
 }
 
+// Mastery has no clock to protect, so pausing just stops counting time and saves;
+// it picks back up by itself when the app is visible again.
 function pause() {
   if (!game || !game.running) return;
   game.elapsed = elapsed();
   game.running = false;
   cancelTrace();
+  if (game.mode === "mastery") return saveMastery();
   $("paused").hidden = false;
 }
 
@@ -246,11 +277,29 @@ function resume() {
   requestAnimationFrame(tick);
 }
 
-$("pause").addEventListener("click", pause);
+// Resume Mastery when nothing is in the way (app visible, on the board, no pop-up).
+function resumeMasteryIfClear() {
+  if (game?.mode === "mastery" && !document.hidden && $("game").classList.contains("active")
+      && $("egg").hidden && $("goal").hidden) resume();
+}
+
+$("pause").addEventListener("click", () => (game?.mode === "mastery" ? finishMastery() : pause()));
 $("resume").addEventListener("click", resume);
-document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pause();
+  else resumeMasteryIfClear();
+});
 $("quit").addEventListener("click", () => {
   if (!game) return;
+  if (game.mode === "mastery") {
+    // Leaving a Mastery board keeps it; it's there to resume from the home screen.
+    pause();
+    game = null;
+    renderHome();
+    show("home");
+    toast("Board saved. Resume it anytime.");
+    return;
+  }
   const wasRunning = game.running;
   pause();
   if (confirm("Quit this round? It won't count.")) {
@@ -264,171 +313,205 @@ $("quit").addEventListener("click", () => {
   }
 });
 
-// ---------- Hints (training mode) ----------
+// ---------- Mastery ----------
 
-// After a dry spell (the "Hints start after" setting), highlight the opening tiles of a
-// few unfound words (free). If still stuck, extend the opening by a tile.
-const STARTER_EXTEND = 12;
-// If you find a word with relatives, don't come back to any of them within this many
-// seconds, *and* you've gone quiet (the "Hints start after" delay, or 15 s when that
-// is off), the Coach points back at it. It lapses after the same time without progress.
-const FAMILY_REMIND = 25;
+const MASTERY_KEY = "wg.mastery";
 
-function quietNeeded() {
-  return settings.starter === "off" ? 15 : Number(settings.starter);
+function loadMastery() {
+  try {
+    const m = JSON.parse(localStorage.getItem(MASTERY_KEY));
+    return m && Array.isArray(m.board) ? m : null;
+  } catch { return null; }
+}
+function clearMastery() {
+  try { localStorage.removeItem(MASTERY_KEY); } catch {}
+}
+function saveMastery() {
+  if (game?.mode !== "mastery" || game.over) return;
+  lastSave = performance.now();
+  const h = game.hint;
+  save(MASTERY_KEY, {
+    v: 1, sizeKey: game.sizeKey, board: game.board, found: game.found, assisted: [...game.assisted],
+    hintsUsed: game.hintsUsed, elapsed: elapsed(), goalPct: game.goalPct, longReq: game.longReq,
+    goalShown: game.goalShown,
+    hint: h ? { word: h.target.word, focus: h.target.focus, root: h.target.root, level: h.level } : null,
+  });
 }
 
-function stuckDelay() {
-  return Number(settings.starter);
-}
-
-function nudge(t) {
-  if (game.hint) return; // a paid hint is already guiding
-  if (familyNudge(t) || settings.starter === "off") return;
-  if (!game.starter && t - game.lastFindAt >= stuckDelay()) {
-    const s = pickStarter(game.words, game.foundSet, profile.spot, trie);
-    if (s) setStarter(s, t);
-    else game.lastFindAt = t; // every common word found; don't search again every frame
-    $("hint-btn").classList.add("ready");
-  } else if (game.starter && !game.starter.final && t - Math.max(game.lastFindAt, game.starterAt) >= STARTER_EXTEND) {
-    const s = game.starter.tiles.length < 3 && pickStarter(game.words, game.foundSet, profile.spot, trie, { tiles: 3, within: game.starter });
-    if (s) setStarter({ ...s, final: true }, t);
-    else game.starter.final = true;
-  }
-}
-
-// Returns true while a family reminder owns the nudge slot.
-function familyNudge(t) {
-  const f = game.family;
-  if (f) {
-    if (t - Math.max(f.shownAt, f.progressAt) >= FAMILY_REMIND) {
-      clearFamily();
-      $("hint-msg").textContent = "Stuck? A hint costs a point or two.";
-      $("hint-msg").classList.remove("active");
+function startMastery() {
+  const saved = loadMastery();
+  if (saved) {
+    // Rebuild from the saved board and size (not the current settings).
+    const { minLen } = MODES[saved.sizeKey];
+    const words = solve(saved.board, trie, minLen);
+    const found = saved.found.filter((w) => words.has(w));
+    game = newGameState("mastery", saved.sizeKey, saved.board, words, {
+      found, foundSet: new Set(found), assisted: new Set(saved.assisted.filter((w) => words.has(w))),
+      hintsUsed: saved.hintsUsed || 0, elapsed: saved.elapsed || 0,
+      goalPct: saved.goalPct, longReq: saved.longReq, goalShown: !!saved.goalShown,
+    });
+    const h = saved.hint;
+    if (h && words.has(h.word) && !game.foundSet.has(h.word)) {
+      game.hint = { target: { word: h.word, focus: h.focus, root: h.root }, level: h.level, path: words.get(h.word).path };
     }
-    return !!game.family;
+  } else {
+    const sizeKey = Number(settings.size);
+    const { board, words } = generateMasteryBoard(sizeKey, trie);
+    game = newGameState("mastery", sizeKey, board, words, {
+      goalPct: Number(settings.goal) / 100, longReq: settings.longword === "on", goalShown: false,
+    });
   }
-  // Only step in when you're stuck, not while you're finding other words.
-  if (t - game.lastFindAt < quietNeeded()) return false;
-  // Most recent abandoned family first: it's freshest in mind.
-  const due = game.families.filter((p) => !p.done && t - p.at >= FAMILY_REMIND).pop();
-  if (!due) return false;
-  due.done = true;
-  const relatives = unfoundRelatives(due.root, game.words, game.foundSet);
-  if (!relatives.length) return false;
-  clearStarter();
-  game.family = { root: due.root, words: relatives, shownAt: t, progressAt: t };
-  showFamilyMessage();
-  return true;
+  setupGameScreen();
+  saveMastery();
+  game.running = true;
+  game.resumedAt = performance.now();
+  requestAnimationFrame(tick);
 }
 
-function clearFamily() {
-  game.family = null;
-  for (const el of boardEl.children) el.classList.remove("family", "family-alt");
+function masteryNow() {
+  return masteryStats(game.words, game.foundSet, { goalPct: game.goalPct, longReq: game.longReq, minLen: game.minLen });
 }
 
-// Glow the tiles where the found word can be extended; say how to get the rest.
-function showFamilyMessage() {
-  if (!game.family) return;
-  const { root, words } = game.family;
-  const { msg, extendTiles, altTiles } = familyHint(root, words, game.words, game.foundSet, game.board);
+function updateMasteryHud() {
+  const st = masteryNow();
+  $("timer").textContent = `${st.found} / ${st.total}`;
+  $("timer").classList.remove("low");
+  $("m-fill").style.width = `${Math.min(100, st.pct * 100)}%`;
+  $("m-goal").style.left = `${(st.goalCount / Math.max(1, st.total)) * 100}%`;
+  $("m-bar").classList.toggle("met", st.goalMet);
+  const long = game.longReq && !st.longMet ? " · plus one 6+ letter word" : "";
+  $("m-text").textContent = st.goalMet
+    ? `Goal reached · ${Math.round(st.pct * 100)}% of the common words`
+    : `Goal: ${st.goalCount} words (${Math.round(game.goalPct * 100)}%)${long}`;
+  $("m-extra").textContent = `${plural(game.hintsUsed, "hint")}${st.bonus ? ` · ${st.bonus} bonus` : ""}`;
+  $("m-ladder").innerHTML = st.ladder.map((b) =>
+    `<span class="rung${b.found === b.total ? " done" : ""}"><b>${b.label}</b> ${b.found}/${b.total}</span>`).join("");
+}
+
+// ---------- Mastery hints (only when asked) ----------
+
+function showHintTiles({ starter = [], glow = [], guide = [] }) {
   for (const el of boardEl.children) {
     const i = Number(el.dataset.i);
-    el.classList.toggle("family", extendTiles.includes(i));
-    el.classList.toggle("family-alt", altTiles.includes(i));
-  }
-  if (game.hint) return;
-  $("hint-msg").textContent = msg;
-  $("hint-msg").classList.add("active");
-}
-
-// Track word families as words are found: start a timer for a new family,
-// cancel it if the player comes back to it, and credit reminder-assisted finds.
-function trackFamilies(word, t) {
-  let related = false;
-  for (const p of game.families) {
-    if (relation(word, p.root)) { p.done = true; related = true; }
-  }
-  const f = game.family;
-  if (f?.words.includes(word)) {
-    game.assisted.add(word);
-    f.progressAt = t;
-    if (f.words.every((w) => game.foundSet.has(w))) {
-      clearFamily();
-      if (!game.hint) $("hint-msg").textContent = "Whole family found. Nice.";
-    } else {
-      showFamilyMessage();
-    }
-  } else if (!related && unfoundRelatives(word, game.words, game.foundSet).length) {
-    game.families.push({ root: word, at: t, done: false });
-  }
-}
-
-function setStarter(starter, t) {
-  game.starter = starter;
-  game.starterAt = t;
-  for (const el of boardEl.children) {
-    const i = Number(el.dataset.i);
-    el.classList.toggle("starter", starter.tiles.includes(i));
-    el.classList.toggle("starter-first", i === starter.tiles[0]);
-  }
-  showStarterMessage();
-}
-
-function clearStarter() {
-  game.starter = null;
-  for (const el of boardEl.children) el.classList.remove("starter", "starter-first");
-}
-
-function showStarterMessage() {
-  if (!game.starter || game.hint) return;
-  $("hint-msg").textContent = starterMessage(game.board, game.starter, game.foundSet);
-  $("hint-msg").classList.add("active");
-}
-
-function resetHintUi(msg) {
-  $("hint-btn").classList.remove("ready");
-  $("hint-btn").disabled = false;
-  $("hint-cost").textContent = `−${HINT_COSTS[0]}`;
-  $("hint-msg").textContent = msg;
-  $("hint-msg").classList.remove("active");
-  showHintTiles({ pulse: [], glow: [], guide: [] });
-}
-
-function showHintTiles({ pulse, glow, guide }) {
-  for (const el of boardEl.children) {
-    const i = Number(el.dataset.i);
-    el.classList.toggle("pulse", pulse.includes(i));
+    el.classList.toggle("starter", starter.includes(i));
+    el.classList.toggle("starter-first", i === starter[0]);
     el.classList.toggle("glow", glow.includes(i));
     el.classList.toggle("guide", guide.includes(i));
   }
 }
 
-$("hint-btn").addEventListener("click", () => {
-  if (!game?.running || game.mode !== "train") return;
+function setHintButton() {
+  const h = game.hint;
+  const next = h ? h.level + 1 : 0;
+  $("hint-btn").innerHTML = `Hint <span id="hint-cost">· ${HINT_STEPS[Math.min(next, HINT_STEPS.length - 1)]}</span>`;
+}
+
+function hintStepNow() {
+  const h = game.hint;
+  return masteryHint(h.target, h.level, game.board, h.path, game.words, game.foundSet, trie);
+}
+
+// Redraw the current hint (after resuming a saved board).
+function restoreHintUi() {
+  if (game.hint && game.hint.level >= 0) {
+    const step = hintStepNow();
+    showHintTiles(step);
+    setHintMsg(step.msg, true);
+  } else {
+    showHintTiles({});
+    setHintMsg("Stuck? Ask for a hint. Each one counts.", false);
+  }
+  setHintButton();
+}
+
+function setHintMsg(text, active) {
+  $("hint-msg").textContent = text;
+  $("hint-msg").classList.toggle("active", active);
+}
+
+function spotForHints() {
+  // Mastery's own profile once it has some history; until then, the timed one.
+  return (profile.spotMastery?.all?.seen ?? 0) >= 20 ? profile.spotMastery : profile.spot;
+}
+
+$("hint-btn").addEventListener("click", async () => {
+  if (!game?.running || game.mode !== "mastery") return;
   if (!game.hint) {
-    // While a family reminder or starter is showing, hints point at one of its words.
-    const only = game.family ? new Set(game.family.words) : game.starter ? new Set(game.starter.words) : null;
-    const target = pickHintTarget(game.words, game.foundSet, profile.spot, trie, Math.random, only);
-    if (!target) { $("hint-msg").textContent = "You've found every common word!"; return; }
+    const st = masteryNow();
+    const target = pickMasteryTarget(game.words, game.foundSet, spotForHints(), trie,
+      { preferLong: shouldPreferLong(game.words, game.foundSet, st) });
+    if (!target) return setHintMsg("You've found every common word on this board!", true);
     game.hint = { target, level: -1, path: game.words.get(target.word).path };
   }
   const h = game.hint;
-  if (h.level >= HINT_COSTS.length - 1) return;
   h.level++;
-  const step = hintStep(h.target, h.level, game.board, h.path);
-  game.score -= step.cost;
-  game.hintCost += step.cost;
   game.hintsUsed++;
+  const step = hintStepNow();
   showHintTiles(step);
-  $("hint-btn").classList.remove("ready");
-  $("hint-msg").textContent = step.msg;
-  $("hint-msg").classList.add("active");
-  const next = HINT_COSTS[h.level + 1];
-  $("hint-cost").textContent = next ? `−${next}` : "";
-  $("hint-btn").disabled = !next;
-  updateHud(elapsed());
+  setHintMsg(step.msg, true);
+  if (step.reveal) {
+    const word = h.target.word;
+    acceptWord(word, { assisted: true });
+    // Add the meaning when it arrives; fail quietly offline.
+    define(word).then((d) => {
+      if (d && $("hint-msg").textContent.startsWith(`Here it is: ${word.toUpperCase()}`)) {
+        setHintMsg(`Here it is: ${word.toUpperCase()} (${d.pos}): ${d.text}`, true);
+      }
+    }).catch(() => {});
+  } else {
+    setHintButton();
+    saveMastery();
+  }
+  updateHud();
 });
+
+// ---------- Finding words ----------
+
+// Every newly found word goes through here, whether swiped or revealed by a hint.
+function acceptWord(word, { assisted = false } = {}) {
+  game.found.push(word);
+  game.foundSet.add(word);
+  game.score += scoreWord(word);
+  game.lastFindAt = elapsed();
+  if (assisted) game.assisted.add(word);
+  if (game.hint?.target.word === word) {
+    // Found the hinted word (or it was shown): it counts as found with help.
+    game.assisted.add(word);
+    const revealed = assisted;
+    game.hint = null;
+    if (!revealed) {
+      showHintTiles({});
+      setHintMsg("That's the one. Nice.", false);
+    }
+    setHintButton();
+  }
+  addChip(word, true, game.assisted.has(word));
+  updateHud(elapsed());
+  if (game.mode === "mastery") {
+    saveMastery();
+    const st = masteryNow();
+    if (st.goalMet && !game.goalShown) {
+      game.goalShown = true;
+      saveMastery();
+      showGoal(st);
+    }
+  }
+}
+
+function showGoal(st) {
+  pause();
+  $("goal-text").textContent =
+    `${st.found} of ${st.total} common words (${Math.round(st.pct * 100)}%) · ${plural(game.hintsUsed, "hint")} · ${clock(elapsed())}`;
+  $("goal").hidden = false;
+}
+$("goal-keep").addEventListener("click", () => { $("goal").hidden = true; resumeMasteryIfClear(); });
+$("goal-finish").addEventListener("click", () => { $("goal").hidden = true; endGame(); });
+
+function finishMastery() {
+  const st = masteryNow();
+  if (!st.goalMet && !confirm(`Finish this board? You've found ${st.found} of the ${st.goalCount} words in your goal.`)) return;
+  endGame();
+}
 
 // ---------- Tracing ----------
 
@@ -470,7 +553,7 @@ function renderPath(state = "") {
   if (state) boardEl.classList.add(state);
   drawTrace($("trace"), $("trace-line"), path, size);
   const word = path.map((i) => board[i]).join("");
-  const pts = word.length >= game.minLen && !state ? `+${scoreWord(word)}` : "";
+  const pts = word.length >= game.minLen && !state && game.mode !== "mastery" ? `+${scoreWord(word)}` : "";
   if (!state) setCurrent(word, pts);
 }
 
@@ -502,6 +585,7 @@ boardEl.addEventListener("pointerdown", (e) => {
   if (!game?.running) return;
   e.preventDefault();
   clearTimeout(game.flashTimer);
+  if (game.mode === "mastery" && !game.hint) showHintTiles({}); // clear a revealed word's glow
   boardEl.setPointerCapture(e.pointerId);
   game.tracing = true;
   game.path = [];
@@ -534,31 +618,8 @@ function finishTrace() {
     state = "dup"; pts = "already found";
   } else if (game.words.has(word)) {
     state = "good";
-    const p = scoreWord(word);
-    pts = `+${p}`;
-    game.found.push(word);
-    game.foundSet.add(word);
-    game.score += p;
-    game.lastFindAt = elapsed();
-    if (game.hint?.target.word === word) {
-      game.assisted.add(word);
-      game.hint = null;
-      resetHintUi("That's the one. Hint cost already paid.");
-    } else {
-      $("hint-btn").classList.remove("ready");
-    }
-    if (game.mode === "train") trackFamilies(word, game.lastFindAt);
-    if (game.starter?.words.includes(word)) {
-      game.assisted.add(word);
-      if (game.starter.words.every((w) => game.foundSet.has(w))) {
-        clearStarter();
-        if (!game.hint) $("hint-msg").textContent = "Got them all. Nice.";
-      } else {
-        showStarterMessage();
-      }
-    }
-    addChip(word);
-    updateHud(elapsed());
+    pts = game.mode === "mastery" ? "" : `+${scoreWord(word)}`;
+    acceptWord(word);
   } else {
     state = "bad"; pts = "not a word";
   }
@@ -567,9 +628,9 @@ function finishTrace() {
   game.flashTimer = setTimeout(() => { if (game && !game.tracing) { game.path = []; renderPath(); } }, 450);
 }
 
-function addChip(word) {
+function addChip(word, animate = true, helped = false) {
   const chip = document.createElement("span");
-  chip.className = "chip new";
+  chip.className = `chip${animate ? " new" : ""}${helped ? " helped" : ""}`;
   chip.textContent = word;
   $("found").prepend(chip);
 }
@@ -577,9 +638,11 @@ function addChip(word) {
 // ---------- Results ----------
 
 function endGame() {
+  if (game.mode === "mastery") game.elapsed = elapsed();
   game.running = false;
   game.over = true;
   cancelTrace();
+  if (game.mode === "mastery") return endMastery();
 
   const { mode, sizeKey, duration, score, botScore, words, foundSet, assisted } = game;
   const available = totalPoints(words.keys());
@@ -592,10 +655,7 @@ function endGame() {
   const rivalFinal = botScore - sharedPts;
   const result = mode === "rival" ? (youFinal > rivalFinal ? "win" : youFinal < rivalFinal ? "loss" : "tie") : null;
   const before = botSkill(profile, sizeKey, settings.challenge, duration);
-  // Hinted rounds would skew the Rival's read on your level, so only unassisted modes feed it.
-  if (mode !== "train") {
-    profile = updateProfile(profile, { sizeKey, durationSec: duration, playerPoints: score, available, result });
-  }
+  profile = updateProfile(profile, { sizeKey, durationSec: duration, playerPoints: score, available, result });
   // Best % completed, per board size and round length. Only words found without help count.
   const soloPct = available ? (totalPoints([...foundSet].filter((w) => !assisted.has(w))) / available) * 100 : 0;
   const key = pctKey(sizeKey, duration);
@@ -609,7 +669,7 @@ function endGame() {
   renderLessons(buildLessons(words, foundSet, byTag, profile.spot));
 
   const titles = { win: "You beat the Rival!", loss: "Rival takes this one", tie: "Dead heat!" };
-  $("result-title").textContent = titles[result] ?? (mode === "train" ? "Training round" : "Time!");
+  $("result-title").textContent = titles[result] ?? "Time!";
   const pct = available ? (totalPoints(foundSet) / available) * 100 : 0;
   let sub = `${plural(game.found.length, "word")} of ${words.size} · ${pct.toFixed(1)}% of the board's points`;
   if (result) {
@@ -626,20 +686,48 @@ function endGame() {
   $("result-scores").innerHTML = result
     ? `<div><b style="color:var(--accent)">${youFinal}</b><span>You</span></div>
        <div><b style="color:var(--rival)">${rivalFinal}</b><span>Rival</span></div>`
-    : mode === "train"
-    ? `<div><b style="color:var(--accent)">${score}</b><span>Points</span></div>
-       <div><b>${foundSet.size - assisted.size}</b><span>Found solo</span></div>
-       <div><b style="color:var(--bad)">${game.hintCost ? `−${game.hintCost}` : 0}</b><span>${plural(game.hintsUsed, "hint")}</span></div>`
     : `<div><b style="color:var(--accent)">${score}</b><span>Points</span></div>
        <div><b>${available}</b><span>Available</span></div>`;
 
-  $("tab-rival").hidden = mode !== "rival";
+  showResults(700);
+}
+
+function showResults(delay) {
+  $("tab-rival").hidden = game.mode !== "rival";
   renderTiles($("mini-board"), game.board, game.size);
   ensureMiniTrace();
   showPath([]);
   hideDefinition();
   selectTab("yours");
-  setTimeout(() => show("results"), 700);
+  setTimeout(() => show("results"), delay);
+}
+
+// Mastery's summary. It's untimed, so it stays out of the timed stats (Rival skill
+// and pace, best score, best %) and keeps its own spotting profile.
+function endMastery() {
+  const { words, foundSet, assisted } = game;
+  const st = masteryNow();
+  clearMastery();
+  const byTag = analyzeRound(words, foundSet, assisted, trie);
+  profile.spotMastery = updateSpotting(profile.spotMastery || {}, byTag);
+  const longest = [...foundSet].sort((a, b) => b.length - a.length)[0] || "";
+  profile.mastery = [...(profile.mastery ?? []), {
+    t: Date.now(), sizeKey: game.sizeKey, total: st.total, found: st.found, goal: game.goalPct,
+    goalMet: st.goalMet, hints: game.hintsUsed, secs: Math.round(game.elapsed), longest,
+  }].slice(-50);
+  save("wg.profile", profile);
+  renderLessons(buildLessons(words, foundSet, byTag, profile.spotMastery));
+
+  $("result-title").textContent = st.goalMet ? "Board mastered!" : "Board finished";
+  let sub = `${st.found} of ${st.total} common words · ${plural(game.hintsUsed, "hint")} · ${clock(game.elapsed)}`;
+  if (longest) sub += ` · longest: ${longest.toUpperCase()}`;
+  if (st.bonus) sub += ` · ${st.bonus} bonus ${st.bonus === 1 ? "word" : "words"}`;
+  $("result-sub").textContent = sub;
+  $("result-scores").innerHTML = `
+    <div><b style="color:var(--accent)">${Math.round(st.pct * 100)}%</b><span>Common words</span></div>
+    <div><b>${game.hintsUsed}</b><span>Hints</span></div>
+    <div><b>${clock(game.elapsed)}</b><span>Time</span></div>`;
+  showResults(300);
 }
 
 function renderLessons(lessons) {
@@ -729,8 +817,8 @@ function selectTab(tab) {
   let list, legend = "";
   if (tab === "yours") {
     list = [...foundSet];
+    if (game.mode === "mastery" && game.assisted.size) legend = "• = found with a hint or shown to you";
     if (game.mode === "rival") legend = game.classic ? "• = the Rival found it too (cancelled, scores 0)" : "• = the Rival found it too";
-    if (game.mode === "train" && game.assisted.size) legend = "• = found with help (hint or starter)";
   } else if (tab === "rival") {
     list = [...botWords];
     legend = game.classic ? "• = you found it too (cancelled, scores 0)" : "• = you found it too";
@@ -742,7 +830,7 @@ function selectTab(tab) {
 
   const other = tab === "rival" ? foundSet
     : tab === "yours" && game.mode === "rival" ? botWords
-    : tab === "yours" && game.mode === "train" ? game.assisted
+    : tab === "yours" && game.mode === "mastery" ? game.assisted
     : new Set();
   const rows = list.map((w) => {
     const cancelled = game.classic && tab !== "missed" && foundSet.has(w) && botWords.has(w);
@@ -770,7 +858,7 @@ $("again").addEventListener("click", () => startGame(game.mode));
 $("home-btn").addEventListener("click", () => { renderHome(); show("home"); });
 $("open-settings").addEventListener("click", () => show("settings"));
 $("close-settings").addEventListener("click", () => { renderHome(); show("home"); });
-$("play-train").addEventListener("click", () => startGame("train"));
+$("play-mastery").addEventListener("click", () => startGame("mastery"));
 $("play-rival").addEventListener("click", () => startGame("rival"));
 $("play-free").addEventListener("click", () => startGame("free"));
 
@@ -929,7 +1017,7 @@ if (EGG_TEST) {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) eggTick(false); });
 eggTick(false);
 
-$("egg-close").addEventListener("click", () => { $("egg").hidden = true; });
+$("egg-close").addEventListener("click", () => { $("egg").hidden = true; resumeMasteryIfClear(); });
 
 // Hidden setup: 5 quick taps on the version text, only on an armed phone.
 $("version").addEventListener("click", () => {

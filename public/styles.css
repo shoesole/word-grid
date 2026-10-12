@@ -125,16 +125,34 @@ button:disabled { opacity: 0.5; cursor: default; }
 .score.rival > span:nth-child(2) { color: var(--rival); }
 .score.rival.bump { animation: bump 0.35s ease; }
 .scores.solo { grid-template-columns: 1fr; }
+.scores[hidden] { display: none; }
 .scores.solo .rival { display: none; }
 @keyframes bump { 50% { transform: scale(1.06); } }
 
-.hint-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; min-height: 36px; }
+/* Mastery */
+.icon-btn.text-btn { width: auto; padding: 0 14px; color: var(--text); font-size: 15px; }
+#game.mastery .timer { font-size: 26px; }
+.mastery-panel { margin-top: 10px; background: var(--bg-2); border-radius: 12px; padding: 10px 12px; }
+.mastery-panel[hidden] { display: none; }
+.m-bar { position: relative; height: 10px; background: var(--surface); border-radius: 5px; }
+.m-bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 5px; transition: width 0.3s ease; }
+.m-bar.met i { background: var(--good); }
+.m-goal { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; background: var(--text); border-radius: 2px; }
+.m-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.m-ladder { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rung { font-size: 12px; background: var(--surface); border-radius: 6px; padding: 2px 7px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rung b { color: var(--text); }
+.rung.done { background: rgba(46, 194, 126, 0.25); }
+.chip.helped { opacity: 0.6; }
+.goal-text { margin: 0 0 16px; color: var(--muted); line-height: 1.4; }
+.goal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .hint-row[hidden] { display: none; }
+.hint-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; min-height: 36px; }
 .hint-btn {
   flex: none; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
   padding: 7px 12px; font-size: 14px; font-weight: 700; color: var(--text);
 }
-.hint-btn span { color: var(--bad); font-weight: 600; }
+.hint-btn span { color: var(--muted); font-weight: 600; }
 .hint-btn.ready { border-color: var(--rival); animation: ready 1.6s ease-in-out infinite; }
 @keyframes ready { 50% { box-shadow: 0 0 0 5px rgba(124, 196, 255, 0.25); } }
 .hint-msg { font-size: 14px; color: var(--muted); line-height: 1.25; }
@@ -283,3 +301,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   background: var(--surface); color: var(--text); padding: 8px 14px; border-radius: 10px; font-size: 14px; z-index: 30;
 }
 .toast[hidden] { display: none; }
+
+/* Mastery adds a progress panel and hint row, so the board gives up a little height. */
+#game.mastery .board-wrap { width: min(100%, 50dvh); }
+#game.mastery .current { height: 36px; margin: 6px 0 4px; font-size: 24px; }
+#game.mastery .hint-row { margin-top: 8px; min-height: 32px; }
+#game.mastery .found { margin-top: 10px; }

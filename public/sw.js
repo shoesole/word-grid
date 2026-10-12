@@ -4,7 +4,7 @@
 // Bump VERSION (and APP_VERSION in app.js) whenever any file in public/ changes.
 const VERSION = "wg-v8";
 const FILES = [
-  "./", "index.html", "styles.css", "app.js", "engine.js", "coach.js", "define.js", "words.txt",
+  "./", "index.html", "styles.css", "app.js", "engine.js", "coach.js", "mastery.js", "define.js", "words.txt",
   "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png",
 ];
 const NETWORK_TIMEOUT_MS = 4000;
