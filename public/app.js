@@ -266,11 +266,11 @@ $("quit").addEventListener("click", () => {
 
 // ---------- Hints (training mode) ----------
 
-// After a dry spell (the "Starter after" setting), highlight the opening tiles of a
+// After a dry spell (the "Hints start after" setting), highlight the opening tiles of a
 // few unfound words (free). If still stuck, extend the opening by a tile.
 const STARTER_EXTEND = 12;
 // If you find a word with relatives, don't come back to any of them within this many
-// seconds, *and* you've gone quiet (the "Starter after" delay, or 15 s when starters
+// seconds, *and* you've gone quiet (the "Hints start after" delay, or 15 s when that
 // are off), the Coach points back at it. It lapses after the same time without progress.
 const FAMILY_REMIND = 25;
 
