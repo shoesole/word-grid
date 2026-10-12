@@ -776,19 +776,56 @@ $("play-free").addEventListener("click", () => startGame("free"));
 
 // ---------- Easter egg ----------
 // Off by default. Tapping the home logo 5 times toggles it for this device.
-// Once on, it pops up after 20 minutes of time with the app open, at most once a day.
+// Once on, it only counts time with the app open at night (10 pm – 5 am), per night:
+//   15 min: the photo and message (dismissable)
+//   30 min: a second message (dismissable)
+//   40 min: "Time for bed." and the app is locked until 5 am
+// The night's count and the lock reset at 5 am. Tapping the bedtime message 5 times
+// disarms the egg and lifts the lock (an escape hatch in case the clock is wrong).
 
-const EGG_AFTER = 20 * 60;
+const NIGHT_START = 22; // 10 pm
+const MORNING = 5; // 5 am
+const EGG_STAGES = [
+  { at: 15 * 60, img: true, msg: "Angie, you've been a naughty girl and you need to be punished." },
+  { at: 30 * 60, img: false, msg: "Seriously, you could be having sex right now." },
+  { at: 40 * 60, img: false, msg: "Time for bed.", lock: true },
+];
+const EGG_OFF = { on: false, night: "", seconds: 0, stage: 0 };
 let eggTaps = [];
 
-document.querySelector(".logo").addEventListener("click", () => {
+// The evening a moment belongs to (10 pm – 5 am counts as one night), or null by day.
+function nightOf(d) {
+  const h = d.getHours();
+  if (h >= NIGHT_START) return d.toDateString();
+  if (h < MORNING) {
+    const prev = new Date(d);
+    prev.setDate(d.getDate() - 1);
+    return prev.toDateString();
+  }
+  return null;
+}
+
+function fiveTaps() {
   const now = Date.now();
   eggTaps = [...eggTaps.filter((t) => now - t < 3000), now];
-  if (eggTaps.length < 5) return;
+  if (eggTaps.length < 5) return false;
   eggTaps = [];
-  const on = !load("wg.egg", { on: false }).on;
-  save("wg.egg", { on, day: "", seconds: 0, shown: false });
+  return true;
+}
+
+document.querySelector(".logo").addEventListener("click", () => {
+  if (!fiveTaps()) return;
+  const on = !load("wg.egg", EGG_OFF).on;
+  save("wg.egg", { ...EGG_OFF, on });
   toast(on ? "Surprise armed" : "Surprise off");
+});
+
+$("egg-msg").addEventListener("click", () => {
+  if (!$("egg").classList.contains("locked") || !fiveTaps()) return;
+  save("wg.egg", EGG_OFF);
+  $("egg").hidden = true;
+  $("egg").classList.remove("locked");
+  toast("Surprise off");
 });
 
 function toast(msg) {
@@ -798,26 +835,47 @@ function toast(msg) {
   setTimeout(() => { el.hidden = true; }, 1800);
 }
 
-setInterval(() => {
-  if (document.hidden) return;
-  const egg = load("wg.egg", { on: false });
-  if (!egg.on) return;
-  const today = new Date().toDateString();
-  if (egg.day !== today) Object.assign(egg, { day: today, seconds: 0, shown: false });
-  if (egg.shown) return;
-  egg.seconds += 5;
-  if (egg.seconds >= EGG_AFTER) {
-    egg.shown = true;
-    showEgg();
-  }
-  save("wg.egg", egg);
-}, 5000);
-
-function showEgg() {
+function showEggStage(stage) {
+  const s = EGG_STAGES[stage - 1];
   pause(); // don't let the round clock run while it's up
-  $("egg-img").src = "egg.gif";
+  $("egg-img").hidden = !s.img;
+  if (s.img) $("egg-img").src = "egg.gif";
+  $("egg-msg").textContent = s.msg;
+  $("egg-close").hidden = !!s.lock;
+  $("egg").classList.toggle("locked", !!s.lock);
   $("egg").hidden = false;
 }
+
+function eggTick(countTime) {
+  const egg = load("wg.egg", EGG_OFF);
+  if (!egg.on) return;
+  const night = nightOf(new Date());
+  if (night !== egg.night) {
+    // Daytime, or a new night: reset, and lift last night's lock.
+    Object.assign(egg, { night: night ?? "", seconds: 0, stage: 0 });
+    if ($("egg").classList.contains("locked")) {
+      $("egg").hidden = true;
+      $("egg").classList.remove("locked");
+    }
+  }
+  if (night) {
+    const locked = egg.stage >= EGG_STAGES.length;
+    if (locked && $("egg").hidden) showEggStage(egg.stage); // reopened during a locked night
+    if (countTime && !locked) {
+      egg.seconds += 5;
+      const next = EGG_STAGES[egg.stage];
+      if (egg.seconds >= next.at) {
+        egg.stage++;
+        showEggStage(egg.stage);
+      }
+    }
+  }
+  save("wg.egg", egg);
+}
+
+setInterval(() => { if (!document.hidden) eggTick(true); }, 5000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) eggTick(false); });
+eggTick(false);
 
 $("egg-close").addEventListener("click", () => { $("egg").hidden = true; });
 

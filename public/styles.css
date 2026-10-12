@@ -256,6 +256,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .overlay.egg { z-index: 20; }
 .egg-card { max-width: 320px; margin: 0 var(--gutter); }
 .egg-card img { width: 150px; height: 150px; border-radius: 12px; display: block; margin: 0 auto 14px; }
+.egg-card img[hidden], .egg-card button[hidden] { display: none; }
 .egg-card p { margin: 0 0 18px; font-size: 18px; font-weight: 600; line-height: 1.35; }
 .toast {
   position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%);
