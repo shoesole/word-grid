@@ -271,7 +271,7 @@ $("quit").addEventListener("click", () => {
 const STARTER_EXTEND = 12;
 // If you find a word with relatives, don't come back to any of them within this many
 // seconds, *and* you've gone quiet (the "Hints start after" delay, or 15 s when that
-// are off), the Coach points back at it. It lapses after the same time without progress.
+// is off), the Coach points back at it. It lapses after the same time without progress.
 const FAMILY_REMIND = 25;
 
 function quietNeeded() {
