@@ -786,9 +786,9 @@ $("play-free").addEventListener("click", () => startGame("free"));
 const NIGHT_START = 22; // 10 pm
 const MORNING = 5; // 5 am
 const EGG_STAGES = [
-  { at: 15 * 60, img: true, msg: "Angie, you've been a naughty girl and you need to be punished." },
-  { at: 30 * 60, img: false, msg: "Is this really better than the sex you could be having right now?" },
-  { at: 40 * 60, img: false, msg: "Sorry, you can't control yourself but it's time for bed", lock: true },
+  { at: 15 * 60, msg: "Angie, you've been a naughty girl and you need to be punished." },
+  { at: 30 * 60, msg: "Is this really better than the sex you could be having right now?" },
+  { at: 40 * 60, msg: "Sorry, you can't control yourself but it's time for bed", lock: true },
 ];
 const EGG_OFF = { on: false, night: "", seconds: 0, stage: 0 };
 let eggTaps = [];
@@ -835,11 +835,42 @@ function toast(msg) {
   setTimeout(() => { el.hidden = true; }, 1800);
 }
 
-function showEggStage(stage) {
+// Each message can have an optional picture, chosen on the phone and kept only in its
+// IndexedDB, never in the app's files.
+function idb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("wg", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("files");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbDo(mode, fn) {
+  const db = await idb();
+  return new Promise((resolve, reject) => {
+    const req = fn(db.transaction("files", mode).objectStore("files"));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+const getPic = (n) => idbDo("readonly", (s) => s.get(`egg-pic-${n}`)).catch(() => null);
+const setPic = (n, blob) => idbDo("readwrite", (s) => s.put(blob, `egg-pic-${n}`));
+const removePic = (n) => idbDo("readwrite", (s) => s.delete(`egg-pic-${n}`));
+
+const picUrls = {};
+function blobUrl(key, blob) {
+  if (picUrls[key]) URL.revokeObjectURL(picUrls[key]);
+  picUrls[key] = blob ? URL.createObjectURL(blob) : null;
+  return picUrls[key];
+}
+
+async function showEggStage(stage) {
   const s = EGG_STAGES[stage - 1];
   pause(); // don't let the round clock run while it's up
-  $("egg-img").hidden = !s.img;
-  if (s.img) $("egg-img").src = "egg.gif";
+  const img = $("egg-img");
+  const blob = await getPic(stage);
+  img.hidden = !blob; // no picture chosen: text only
+  if (blob) img.src = blobUrl("show", blob);
   $("egg-msg").textContent = s.msg;
   $("egg-close").hidden = !!s.lock;
   $("egg").classList.toggle("locked", !!s.lock);
@@ -878,6 +909,42 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) eggT
 eggTick(false);
 
 $("egg-close").addEventListener("click", () => { $("egg").hidden = true; });
+
+// Hidden setup: 5 quick taps on the version text, only on an armed phone.
+$("version").addEventListener("click", () => {
+  if (!fiveTaps() || !load("wg.egg", EGG_OFF).on) return;
+  openEggSetup();
+});
+
+async function openEggSetup() {
+  for (const slot of document.querySelectorAll(".pic-slot")) {
+    const n = slot.dataset.slot;
+    const blob = await getPic(n);
+    const preview = slot.querySelector(".pic-preview");
+    preview.hidden = !blob;
+    if (blob) preview.src = blobUrl(`slot${n}`, blob);
+    slot.querySelector(".pic-status").textContent = blob ? "" : "No picture";
+    slot.querySelector(".pic-remove").hidden = !blob;
+  }
+  $("egg-setup").hidden = false;
+}
+
+for (const slot of document.querySelectorAll(".pic-slot")) {
+  const n = slot.dataset.slot;
+  slot.querySelector("input[type=file]").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      await setPic(n, file);
+      openEggSetup();
+    } catch {
+      slot.querySelector(".pic-status").textContent = "Couldn't save that one. Try a smaller picture.";
+    }
+  });
+  slot.querySelector(".pic-remove").addEventListener("click", async () => { await removePic(n).catch(() => {}); openEggSetup(); });
+}
+$("setup-close").addEventListener("click", () => { $("egg-setup").hidden = true; });
 
 // ---------- Boot ----------
 

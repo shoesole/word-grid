@@ -166,9 +166,41 @@
   <!-- Easter egg: off by default; tap the home logo 5 times to toggle. -->
   <div class="overlay egg" id="egg" hidden>
     <div class="overlay-card egg-card">
-      <img id="egg-img" alt="" width="150" height="150" hidden>
+      <img id="egg-img" alt="" hidden>
       <p id="egg-msg"></p>
       <button id="egg-close" class="btn primary">Dismiss</button>
+    </div>
+  </div>
+  <!-- Hidden Easter egg setup: 5 taps on the version text, only when armed. -->
+  <div class="overlay egg" id="egg-setup" hidden>
+    <div class="overlay-card egg-card setup-card">
+      <h2>Surprise pictures</h2>
+      <p class="setup-note">Optional. Stored only on this phone. A message without a picture shows on its own.</p>
+      <div class="pic-slot" data-slot="1">
+        <div class="pic-head"><b>15 minutes</b><span class="pic-status"></span></div>
+        <img class="pic-preview" alt="" hidden>
+        <div class="pic-actions">
+          <label class="btn secondary file-btn">Choose<input type="file" accept="image/gif,image/*"></label>
+          <button class="btn secondary pic-remove" hidden>Remove</button>
+        </div>
+      </div>
+      <div class="pic-slot" data-slot="2">
+        <div class="pic-head"><b>30 minutes</b><span class="pic-status"></span></div>
+        <img class="pic-preview" alt="" hidden>
+        <div class="pic-actions">
+          <label class="btn secondary file-btn">Choose<input type="file" accept="image/gif,image/*"></label>
+          <button class="btn secondary pic-remove" hidden>Remove</button>
+        </div>
+      </div>
+      <div class="pic-slot" data-slot="3">
+        <div class="pic-head"><b>Bedtime</b><span class="pic-status"></span></div>
+        <img class="pic-preview" alt="" hidden>
+        <div class="pic-actions">
+          <label class="btn secondary file-btn">Choose<input type="file" accept="image/gif,image/*"></label>
+          <button class="btn secondary pic-remove" hidden>Remove</button>
+        </div>
+      </div>
+      <button id="setup-close" class="btn primary">Done</button>
     </div>
   </div>
   <div class="toast" id="toast" hidden></div>

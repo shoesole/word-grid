@@ -255,10 +255,23 @@ button:disabled { opacity: 0.5; cursor: default; }
 /* ---------- Easter egg ---------- */
 .overlay.egg { z-index: 20; }
 .egg-card { max-width: 320px; margin: 0 var(--gutter); }
-.egg-card img { width: 150px; height: 150px; border-radius: 12px; display: block; margin: 0 auto 14px; }
+.egg-card img { display: block; max-width: 100%; max-height: 240px; min-width: 150px; height: auto; border-radius: 12px; margin: 0 auto 14px; }
 .egg-card img[hidden], .egg-card button[hidden] { display: none; }
+.egg-card h2 { margin: 0 0 6px; }
+.egg-card .setup-note { font-size: 14px; font-weight: 400; color: var(--muted); margin: 0 0 12px; }
+.setup-card { max-height: 90dvh; overflow-y: auto; text-align: left; }
+.pic-slot { border-top: 1px solid var(--line); padding: 10px 0; }
+.pic-head { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; }
+.pic-status { color: var(--muted); font-size: 13px; }
+.egg-card .pic-preview { max-height: 110px; min-width: 0; margin: 8px 0; }
+.pic-actions { display: flex; gap: 8px; margin-top: 6px; }
+.pic-actions .btn { flex: 1; padding: 8px; font-size: 15px; }
+#setup-close { width: 100%; margin-top: 8px; }
+.file-btn { position: relative; cursor: pointer; text-align: center; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; width: 100%; }
 .egg-card p { margin: 0 0 18px; font-size: 18px; font-weight: 600; line-height: 1.35; }
 .toast {
+  pointer-events: none; /* never block taps underneath */
   position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%);
   background: var(--surface); color: var(--text); padding: 8px 14px; border-radius: 10px; font-size: 14px; z-index: 30;
 }

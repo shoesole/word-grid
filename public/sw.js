@@ -5,7 +5,7 @@
 const VERSION = "wg-v8";
 const FILES = [
   "./", "index.html", "styles.css", "app.js", "engine.js", "coach.js", "define.js", "words.txt",
-  "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png", "egg.gif",
+  "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png",
 ];
 const NETWORK_TIMEOUT_MS = 4000;
 
