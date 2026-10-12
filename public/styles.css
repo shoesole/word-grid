@@ -270,6 +270,13 @@ button:disabled { opacity: 0.5; cursor: default; }
 .file-btn { position: relative; cursor: pointer; text-align: center; }
 .file-btn input { position: absolute; inset: 0; opacity: 0; width: 100%; }
 .egg-card p { margin: 0 0 18px; font-size: 18px; font-weight: 600; line-height: 1.35; }
+.egg-test {
+  position: fixed; top: env(safe-area-inset-top); left: 0; right: 0; z-index: 40;
+  display: flex; justify-content: center; align-items: center; gap: 10px;
+  background: #5b2a86; color: #fff; font-size: 13px; padding: 6px 10px;
+}
+.egg-test[hidden] { display: none; }
+.egg-test button { background: rgba(255, 255, 255, 0.2); border-radius: 6px; padding: 3px 8px; font-size: 13px; font-weight: 600; }
 .toast {
   pointer-events: none; /* never block taps underneath */
   position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%);

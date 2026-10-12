@@ -791,10 +791,20 @@ const EGG_STAGES = [
   { at: 40 * 60, msg: "Sorry, you can't control yourself but it's time for bed", lock: true },
 ];
 const EGG_OFF = { on: false, night: "", seconds: 0, stage: 0 };
+
+// Test mode for trying the egg by day: add ?eggtest to the address of a local copy.
+// It's always "night", 1 second counts as 1 minute, it starts armed, and it keeps its
+// own state so real progress is untouched. Ignored on the real site.
+const EGG_TEST = new URLSearchParams(location.search).has("eggtest") && location.hostname !== "shoesole.github.io";
+const EGG_KEY = EGG_TEST ? "wg.egg.test" : "wg.egg";
+const EGG_DEFAULT = EGG_TEST ? { ...EGG_OFF, on: true } : EGG_OFF;
+const TICK_MS = EGG_TEST ? 1000 : 5000;
+const TICK_COUNTS = EGG_TEST ? 60 : 5; // seconds of "night" each tick adds
 let eggTaps = [];
 
 // The evening a moment belongs to (10 pm – 5 am counts as one night), or null by day.
 function nightOf(d) {
+  if (EGG_TEST) return "test night";
   const h = d.getHours();
   if (h >= NIGHT_START) return d.toDateString();
   if (h < MORNING) {
@@ -815,14 +825,14 @@ function fiveTaps() {
 
 document.querySelector(".logo").addEventListener("click", () => {
   if (!fiveTaps()) return;
-  const on = !load("wg.egg", EGG_OFF).on;
-  save("wg.egg", { ...EGG_OFF, on });
+  const on = !load(EGG_KEY, EGG_DEFAULT).on;
+  save(EGG_KEY, { ...EGG_OFF, on });
   toast(on ? "Surprise armed" : "Surprise off");
 });
 
 $("egg-msg").addEventListener("click", () => {
   if (!$("egg").classList.contains("locked") || !fiveTaps()) return;
-  save("wg.egg", EGG_OFF);
+  save(EGG_KEY, EGG_OFF);
   $("egg").hidden = true;
   $("egg").classList.remove("locked");
   toast("Surprise off");
@@ -878,7 +888,7 @@ async function showEggStage(stage) {
 }
 
 function eggTick(countTime) {
-  const egg = load("wg.egg", EGG_OFF);
+  const egg = load(EGG_KEY, EGG_DEFAULT);
   if (!egg.on) return;
   const night = nightOf(new Date());
   if (night !== egg.night) {
@@ -893,7 +903,7 @@ function eggTick(countTime) {
     const locked = egg.stage >= EGG_STAGES.length;
     if (locked && $("egg").hidden) showEggStage(egg.stage); // reopened during a locked night
     if (countTime && !locked) {
-      egg.seconds += 5;
+      egg.seconds += TICK_COUNTS;
       const next = EGG_STAGES[egg.stage];
       if (egg.seconds >= next.at) {
         egg.stage++;
@@ -901,10 +911,21 @@ function eggTick(countTime) {
       }
     }
   }
-  save("wg.egg", egg);
+  save(EGG_KEY, egg);
+  if (EGG_TEST) $("egg-test-time").textContent = `${Math.round(egg.seconds / 60)} min tonight${egg.on ? "" : " (disarmed)"}`;
 }
 
-setInterval(() => { if (!document.hidden) eggTick(true); }, 5000);
+setInterval(() => { if (!document.hidden) eggTick(true); }, TICK_MS);
+
+if (EGG_TEST) {
+  $("egg-test").hidden = false;
+  $("egg-test-restart").addEventListener("click", () => {
+    save(EGG_KEY, EGG_DEFAULT);
+    $("egg").hidden = true;
+    $("egg").classList.remove("locked");
+    eggTick(false);
+  });
+}
 document.addEventListener("visibilitychange", () => { if (!document.hidden) eggTick(false); });
 eggTick(false);
 
@@ -912,7 +933,7 @@ $("egg-close").addEventListener("click", () => { $("egg").hidden = true; });
 
 // Hidden setup: 5 quick taps on the version text, only on an armed phone.
 $("version").addEventListener("click", () => {
-  if (!fiveTaps() || !load("wg.egg", EGG_OFF).on) return;
+  if (!fiveTaps() || !load(EGG_KEY, EGG_DEFAULT).on) return;
   openEggSetup();
 });
 
