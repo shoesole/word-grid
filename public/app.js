@@ -8,7 +8,7 @@ import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
 // Bump together with VERSION in sw.js.
-const APP_VERSION = "8";
+const APP_VERSION = "9";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
