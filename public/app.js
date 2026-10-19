@@ -1,6 +1,7 @@
 import {
   MODES, buildTrie, generateGame, isAdjacent, scoreWord, totalPoints, solve,
-  planBot, botSkill, updateProfile, DEFAULT_PROFILE, rivalRate, updatePace,
+  planBot, updateProfile, DEFAULT_PROFILE, rivalRate, rivalSkill, updatePace,
+  getLadder, freshLadder, updateLadder, ladderProgress,
 } from "./engine.js";
 import { analyzeRound, updateSpotting, buildLessons, hitRate, weakestPatterns } from "./coach.js";
 import { generateMasteryBoard, masteryStats, shouldPreferLong, pickMasteryTarget, masteryHint, HINT_STEPS } from "./mastery.js";
@@ -56,10 +57,12 @@ function renderHome() {
     const key = seg.dataset.setting;
     for (const b of seg.children) b.classList.toggle("on", b.dataset.value === settings[key]);
   }
-  const level = Math.round(botSkill(profile, settings.size, settings.challenge, Number(settings.duration)) * 100);
+  const ladder = getLadder(profile, settings.size);
+  const level = ladder.level;
   $("rival-sub").textContent = trie
-    ? `A bot that adapts to your level · level ${level}`
+    ? `Level ${level} · ${ladderStatus(ladder)}`
     : "A bot that adapts to your level";
+  $("reset-rival").textContent = `Reset ${settings.size}×${settings.size} Rival level (now ${level})`;
   $("status").hidden = !!trie;
   $("play-mastery").disabled = $("play-rival").disabled = $("play-free").disabled = !trie;
   const saved = loadMastery();
@@ -73,7 +76,7 @@ function renderHome() {
   const { wins, losses, ties } = profile;
   $("stats").innerHTML = `
     <div class="stat"><b>${wins}–${losses}${ties ? `–${ties}` : ""}</b><span>vs Rival</span></div>
-    <div class="stat"><b>${level}</b><span>Rival level</span></div>
+    <div class="stat"><b>${level}</b><span>Rival level ${settings.size}×${settings.size}</span></div>
     <div class="stat"><b>${profile.best[settings.size] || 0}</b><span>Best score ${settings.size}×${settings.size}</span></div>
     <div class="stat"><b>${formatPct(profile.bestPct?.[pctKey(settings.size, settings.duration)])}</b><span>Best % ${settings.size}×${settings.size} · ${clock(settings.duration)}</span></div>
     <div class="stat"><b>${boards.filter((b) => b.goalMet).length}</b><span>Boards mastered</span></div>
@@ -143,15 +146,30 @@ function newGameState(mode, sizeKey, board, words, extra = {}) {
   };
 }
 
+// One line on where you stand on the Rival ladder.
+function ladderStatus(ladder) {
+  const p = ladderProgress(ladder);
+  if (p.placement) return `placement: ${plural(p.placement, "game")} left`;
+  const record = `${p.wins}–${p.losses}${p.ties ? `–${p.ties}` : ""} at this level`;
+  if (!p.wins && !p.losses && !p.ties) return "win 3 of your next 5 to level up";
+  return p.toPromote ? `${record} · ${plural(p.toPromote, "more win")} to level up` : record;
+}
+
 function startGame(mode) {
   if (mode === "mastery") return startMastery();
   const sizeKey = Number(settings.size);
   const duration = Number(settings.duration);
   const { board, words } = generateGame(sizeKey, trie);
-  const skill = mode === "rival" ? botSkill(profile, sizeKey, settings.challenge, duration) : 0;
+  if (mode === "rival" && !profile.ladder?.[sizeKey]) {
+    // Pin the starting level now, so this round's result can't shift it.
+    profile.ladder = { ...profile.ladder, [sizeKey]: getLadder(profile, sizeKey) };
+    save("wg.profile", profile);
+  }
+  const level = getLadder(profile, sizeKey).level;
+  const skill = mode === "rival" ? rivalSkill(level, sizeKey, settings.challenge, duration) : 0;
   game = newGameState(mode, sizeKey, board, words, {
-    duration,
-    plan: mode === "rival" ? planBot(words, skill, duration, Math.random, { maxRate: rivalRate(profile, sizeKey, settings.challenge) }) : [],
+    duration, level,
+    plan: mode === "rival" ? planBot(words, skill, duration, Math.random, { maxRate: rivalRate(level, settings.challenge) }) : [],
     classic: mode === "rival" && settings.classic === "on", // shared words cancel at the end
   });
   setupGameScreen();
@@ -655,8 +673,15 @@ function endGame() {
   const youFinal = score - sharedPts;
   const rivalFinal = botScore - sharedPts;
   const result = mode === "rival" ? (youFinal > rivalFinal ? "win" : youFinal < rivalFinal ? "loss" : "tie") : null;
-  const before = botSkill(profile, sizeKey, settings.challenge, duration);
   profile = updateProfile(profile, { sizeKey, durationSec: duration, playerPoints: score, available, result });
+  // Rival ladder: classic-rules games count like any other, using the final scores.
+  let ladderChange = 0, ladderAfter = null;
+  if (result) {
+    const { ladder, change } = updateLadder(getLadder(profile, sizeKey), { result, you: youFinal, rival: rivalFinal });
+    profile.ladder = { ...profile.ladder, [sizeKey]: ladder };
+    ladderChange = change;
+    ladderAfter = ladder;
+  }
   // Best % completed, per board size and round length. Only words found without help count.
   const soloPct = available ? (totalPoints([...foundSet].filter((w) => !assisted.has(w))) / available) * 100 : 0;
   const key = pctKey(sizeKey, duration);
@@ -666,7 +691,6 @@ function endGame() {
   const byTag = analyzeRound(words, foundSet, assisted, trie);
   profile.spot = updateSpotting(profile.spot || {}, byTag);
   save("wg.profile", profile);
-  const after = botSkill(profile, sizeKey, settings.challenge, duration);
   renderLessons(buildLessons(words, foundSet, byTag, profile.spot));
 
   const titles = { win: "You beat the Rival!", loss: "Rival takes this one", tie: "Dead heat!" };
@@ -674,8 +698,10 @@ function endGame() {
   const pct = available ? (totalPoints(foundSet) / available) * 100 : 0;
   let sub = `${plural(game.found.length, "word")} of ${words.size} · ${pct.toFixed(1)}% of the board's points`;
   if (result) {
-    const d = Math.round((after - before) * 100);
-    sub += d > 0 ? " · Rival levels up" : d < 0 ? " · Rival eases off" : "";
+    sub += ladderChange >= 2 ? ` · Big jump! Rival moves up to level ${ladderAfter.level}`
+      : ladderChange > 0 ? ` · You proved it. Rival moves up to level ${ladderAfter.level}`
+      : ladderChange < 0 ? ` · Rival drops to level ${ladderAfter.level}`
+      : ` · Level ${ladderAfter.level}: ${ladderStatus(ladderAfter)}`;
   }
   if (game.classic) {
     sub += shared.length
@@ -858,6 +884,14 @@ $("word-list").addEventListener("click", (e) => {
 $("again").addEventListener("click", () => startGame(game.mode));
 $("home-btn").addEventListener("click", () => { renderHome(); show("home"); });
 $("open-settings").addEventListener("click", () => show("settings"));
+$("reset-rival").addEventListener("click", () => {
+  const n = settings.size;
+  if (!confirm(`Reset the ${n}×${n} Rival? You'll play 5 placement games to find your level again. Your win/loss record is kept.`)) return;
+  profile.ladder = { ...profile.ladder, [n]: freshLadder(profile, n) };
+  save("wg.profile", profile);
+  renderHome();
+  toast(`${n}×${n} Rival reset`);
+});
 $("close-settings").addEventListener("click", () => { renderHome(); show("home"); });
 $("play-mastery").addEventListener("click", () => startGame("mastery"));
 $("play-rival").addEventListener("click", () => startGame("rival"));

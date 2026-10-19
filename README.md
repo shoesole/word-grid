@@ -44,14 +44,26 @@ words and vowel starts. Each pattern's hit rate is compared with your own overal
 "weak" means weaker than your usual. Timed rounds feed the home screen's "Work on" panel
 and the lessons after each round.
 
-## How the Rival adapts
+## How the Rival adapts (the ladder)
 
-After every round, the game updates an estimate of the share of each board's available
-points you usually earn. The coach aims for that share, times a "pressure" factor that
-rises 4% after each of your wins and falls 4% after each loss, so matches stay close.
-The Relaxed / Even / Tough setting scales the result by 0.85 / 1.0 / 1.15.
-The coach prefers common, shorter words (it uses SCOWL commonness tiers) and finds them
-gradually over the round, as a person would.
+The Rival plays on a ladder of fixed levels, separately for 4×4 and 5×5. Each level is
+a set opponent about 8% stronger than the one below (a target share of the board's
+points, scaled by round length and the Relaxed/Even/Tough setting, plus a top speed).
+
+- **Moving up:** win at least 60% of your last 10 games at a level, with at least 5
+  played (like a best-of-5 series; ties count half). Promotions happen on a win, and the
+  record starts fresh at each new level.
+- **Fast track:** 3 blowout wins in a row (scoring 1.5× the Rival) jump 2 levels.
+- **Placement:** a new player's first 5 games on a board size move 2 levels at a time.
+- **Moving down:** only after a real slump: 25% or less over at least 8 games at a
+  level, and only one level.
+- **Classic rules** games count like any other, using the final (cancelled) scores.
+- **Reset:** Settings → Rival → Reset level starts placement again for the selected
+  board size. Your win/loss record is kept.
+
+The home screen shows where you stand ("Level 15 · 2–1 at this level · 1 more win to
+level up"). Players from before the ladder start at the level the old adaptive Rival
+had reached.
 
 ## Settings
 
