@@ -9,7 +9,7 @@ import { define } from "./define.js";
 
 // Shown on the home screen so it's easy to tell which version is running.
 // Bump together with VERSION in sw.js.
-const APP_VERSION = "10.2";
+const APP_VERSION = "10.3";
 
 const $ = (id) => document.getElementById(id);
 const GAP = 3; // board gap in % of width, must match .board { gap } in styles.css
@@ -400,11 +400,11 @@ function updateMasteryHud() {
   $("m-bar").classList.toggle("met", st.goalMet);
   const long = game.longReq && !st.longMet ? " · plus one 6+ letter word" : "";
   $("m-text").textContent = st.goalMet
-    ? `Goal reached · ${Math.round(st.pct * 100)}% of the common words`
+    ? `Goal reached · ${plural(st.found, "word")} found`
     : `Goal: ${st.goalCount} words (${Math.round(game.goalPct * 100)}%)${long}`;
-  $("m-extra").textContent = `${plural(game.hintsUsed, "hint")}${st.bonus ? ` · ${st.bonus} bonus` : ""}`;
+  $("m-extra").textContent = `${plural(game.hintsUsed, "hint")}${st.bonus ? ` · ${st.bonus} uncommon` : ""}`;
   $("m-ladder").innerHTML = st.ladder.map((b) =>
-    `<span class="rung${b.found === b.total ? " done" : ""}"><b>${b.label}</b> ${b.found}/${b.total}</span>`).join("");
+    `<span class="rung${b.left === 0 ? " done" : ""}"><b>${b.label}</b> ${b.found}/${b.total}</span>`).join("");
 }
 
 // ---------- Mastery hints (only when asked) ----------
@@ -520,7 +520,7 @@ function acceptWord(word, { assisted = false } = {}) {
 function showGoal(st) {
   pause();
   $("goal-text").textContent =
-    `${st.found} of ${st.total} common words (${Math.round(st.pct * 100)}%) · ${plural(game.hintsUsed, "hint")} · ${clock(elapsed())}`;
+    `${plural(st.found, "word")} found (goal ${st.goalCount}) · ${plural(game.hintsUsed, "hint")} · ${clock(elapsed())}`;
   $("goal").hidden = false;
 }
 $("goal-keep").addEventListener("click", () => { $("goal").hidden = true; resumeMasteryIfClear(); });
@@ -746,12 +746,12 @@ function endMastery() {
   renderLessons(buildLessons(words, foundSet, byTag, profile.spotMastery));
 
   $("result-title").textContent = st.goalMet ? "Board mastered!" : "Board finished";
-  let sub = `${st.found} of ${st.total} common words · ${plural(game.hintsUsed, "hint")} · ${clock(game.elapsed)}`;
+  let sub = `${plural(st.found, "word")} found · ${st.total} common words on the board · goal ${st.goalCount} · ${plural(game.hintsUsed, "hint")} · ${clock(game.elapsed)}`;
   if (longest) sub += ` · longest: ${longest.toUpperCase()}`;
-  if (st.bonus) sub += ` · ${st.bonus} bonus ${st.bonus === 1 ? "word" : "words"}`;
+  if (st.bonus) sub += ` · ${st.bonus} of your words were uncommon`;
   $("result-sub").textContent = sub;
   $("result-scores").innerHTML = `
-    <div><b style="color:var(--accent)">${Math.round(st.pct * 100)}%</b><span>Common words</span></div>
+    <div><b style="color:var(--accent)">${st.found}/${st.total}</b><span>Found / common</span></div>
     <div><b>${game.hintsUsed}</b><span>Hints</span></div>
     <div><b>${clock(game.elapsed)}</b><span>Time</span></div>`;
   showResults(300);

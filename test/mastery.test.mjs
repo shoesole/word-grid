@@ -40,8 +40,21 @@ st = masteryStats(words, found, opts);
 assert.ok(st.goalMet && st.longMet);
 assert.ok(masteryStats(words, new Set(shortC.slice(0, goal)), { ...opts, longReq: false }).goalMet, "long rule off");
 const rare = [...words].find(([, v]) => v.tier > 1)?.[0];
-if (rare) assert.equal(masteryStats(words, new Set([rare]), opts).bonus, 1);
-const ladderTotal = st.ladder.reduce((a, b) => a + b.total, 0);
+if (rare) {
+  // Uncommon finds count toward the goal (and can push the count past the common total).
+  const withRare = masteryStats(words, new Set([...shortC.slice(0, goal - 2), rare, longC[0]]), opts);
+  assert.equal(withRare.bonus, 1);
+  assert.equal(withRare.found, goal);
+  assert.ok(withRare.goalMet, "uncommon word helps reach the goal");
+  const rareWords = [...words].filter(([, v]) => v.tier > 1).map(([w]) => w);
+  const everything = masteryStats(words, new Set([...c, ...rareWords]), opts);
+  assert.equal(everything.found, c.length + rareWords.length);
+  assert.ok(everything.found > everything.total);
+  // An uncommon 6+ letter word satisfies the long-word rule.
+  const rareLong = rareWords.find((w) => w.length >= LONG);
+  if (rareLong) assert.ok(masteryStats(words, new Set([...shortC.slice(0, goal), rareLong]), opts).longMet);
+}
+const ladderTotal = st.ladder.reduce((a, b) => a + b.total, 0); // common words only
 assert.equal(ladderTotal, c.length);
 console.log("ladder:", st.ladder.map((b) => `${b.label}:${b.found}/${b.total}`).join(" "));
 

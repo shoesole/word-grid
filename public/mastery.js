@@ -36,20 +36,21 @@ function bucketOf(word, minLen) {
   return Math.min(Math.max(word.length, minLen), 7);
 }
 
-// Everything the progress display and goal check need.
+// Everything the progress display and goal check need. The target is set by the
+// board's common words, but every word you find counts toward it, uncommon ones too
+// (`bonus` is how many of your finds are uncommon). So `found` can pass `total`.
 export function masteryStats(words, foundSet, { goalPct, longReq, minLen }) {
   let total = 0, found = 0, bonus = 0, longTotal = 0, longFound = 0;
   const ladder = new Map();
-  for (let n = minLen; n <= 7; n++) ladder.set(n, { label: n === 7 ? "7+" : String(n), found: 0, total: 0 });
+  for (let n = minLen; n <= 7; n++) ladder.set(n, { label: n === 7 ? "7+" : String(n), found: 0, total: 0, left: 0 });
   for (const [w, v] of words) {
     const has = foundSet.has(w);
-    if (!isCommon(v)) { if (has) bonus++; continue; }
-    total++;
-    if (has) found++;
+    const common = isCommon(v);
+    if (!common && !has) continue;
     const b = ladder.get(bucketOf(w, minLen));
-    b.total++;
-    if (has) b.found++;
-    if (w.length >= LONG) { longTotal++; if (has) longFound++; }
+    if (has) { found++; b.found++; if (!common) bonus++; }
+    if (common) { total++; b.total++; if (!has) b.left++; }
+    if (w.length >= LONG) { if (common) longTotal++; if (has) longFound++; }
   }
   const goalCount = Math.ceil(goalPct * total);
   const longMet = !longReq || longTotal === 0 || longFound > 0;
@@ -58,7 +59,7 @@ export function masteryStats(words, foundSet, { goalPct, longReq, minLen }) {
     pct: total ? found / total : 0,
     countMet: found >= goalCount,
     goalMet: found >= goalCount && longMet,
-    ladder: [...ladder.values()].filter((b) => b.total > 0),
+    ladder: [...ladder.values()].filter((b) => b.total > 0 || b.found > 0),
   };
 }
 

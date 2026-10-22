@@ -17,7 +17,8 @@ inflections like "plural of bet" also show the base word's meaning).
 
 No timer. The goal is a share of the board's **common** words (Settings → Mastery Mode → Goal:
 60/70/80/90%, default 80). With **Long word** on (default), the goal also needs at least
-one 6+ letter word. Obscure words are accepted and shown as a bonus but never required.
+one 6+ letter word. The target is set by the common words, but every word you find
+counts toward it, uncommon ones included (they're never required).
 
 - Boards are picked to be a real workout: 40–70 common words with at least 2 long ones on
   4×4, 70–120 with at least 5 on 5×5.
